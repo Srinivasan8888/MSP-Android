@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:qr_code_scanner_plus/qr_code_scanner_plus.dart';
+import '../services/api_service.dart';
+import 'dashboard_page.dart';
 
 class QrPage extends StatefulWidget {
   const QrPage({super.key});
@@ -112,6 +114,19 @@ class _QrPageState extends State<QrPage> {
         result = scanData.code;
       });
       controller.pauseCamera();
+      
+      // Save scanned result to memory and navigate to dashboard
+      if (scanData.code != null) {
+        ApiService.setScannedUserId(scanData.code!);
+        _navigateToDashboard();
+      }
     });
+  }
+
+  void _navigateToDashboard() {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => const DashboardPage()),
+    );
   }
 }

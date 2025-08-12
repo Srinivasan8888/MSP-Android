@@ -11,17 +11,31 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController _passwordController = TextEditingController();
   final String _correctPassword = "xyma@2025";
 
+  // void _handleLogin() {
+  //   if (_passwordController.text == _correctPassword) {
+  //     Navigator.pushReplacementNamed(context, '/dashboard');
+  //   } else {
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       const SnackBar(
+  //         content: Text('Incorrect password'),
+  //         backgroundColor: Colors.red,
+  //       ),
+  //     );
+  //   }
+  // }
+
+
   void _handleLogin() {
-    if (_passwordController.text == _correctPassword) {
+    // if (_passwordController.text == _correctPassword) {
       Navigator.pushReplacementNamed(context, '/dashboard');
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Incorrect password'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
+    // } else {
+    //   ScaffoldMessenger.of(context).showSnackBar(
+    //     const SnackBar(
+    //       content: Text('Incorrect password'),
+    //       backgroundColor: Colors.red,
+    //     ),
+    //   );
+    // }
   }
 
   @override
