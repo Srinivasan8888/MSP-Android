@@ -107,7 +107,7 @@ class _DashboardPageState extends State<DashboardPage> {
       final double screenWidth = MediaQuery.of(context).size.width;
       bool isMobile = screenWidth < 600;
 
-      // Dynamic grid configuration based on screen size
+      // Dynamic grid configuration based on screen size - Alway
       int crossAxisCount = 2;
       double childAspectRatio = 1.1;
       double iconSize = 20;
@@ -177,20 +177,28 @@ class _DashboardPageState extends State<DashboardPage> {
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                           colors: [
-                            Colors.blueAccent.withValues(alpha: 0.1),
-                            Colors.blueAccent.withValues(alpha: 0.05),
+                            Colors.blue.shade50,
+                            Colors.blue.shade100,
+                            Colors.blueAccent.withValues(alpha: 0.15),
                           ],
+                          stops: const [0.0, 0.5, 1.0],
                         ),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: Colors.blueAccent.withValues(alpha: 0.3),
+                          color: Colors.blueAccent.withValues(alpha: 0.4),
                           width: 1.5,
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.blueAccent.withValues(alpha: 0.1),
-                            blurRadius: 4,
-                            offset: const Offset(0, 2),
+                            color: Colors.blueAccent.withValues(alpha: 0.2),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                            spreadRadius: 1,
+                          ),
+                          BoxShadow(
+                            color: Colors.white.withValues(alpha: 0.8),
+                            blurRadius: 2,
+                            offset: const Offset(0, -1),
                           ),
                         ],
                       ),
@@ -345,22 +353,290 @@ class _DashboardPageState extends State<DashboardPage> {
       margin: EdgeInsets.all(isMobile ? 4.0 : 8.0),
       child: Card(
         elevation: 4,
-        color: Colors.yellow,
+        color: Colors.white,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
         ),
-        child: Center(
-          child: Text(
-            'Section 2',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: isMobile ? 18 : 24,
-              fontWeight: FontWeight.bold,
-            ),
+        child: Padding(
+          padding: EdgeInsets.all(isMobile ? 8.0 : 16.0),
+          child: Column(
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    Expanded(child: _buildBox('Box 1', _getBoxColor('Box 1'))),
+                    SizedBox(width: 8),
+                    Expanded(child: _buildBox('Box 2', _getBoxColor('Box 2'))),
+                  ],
+                ),
+              ),
+              SizedBox(height: 8),
+              Expanded(
+                child: Row(
+                  children: [
+                    Expanded(child: _buildBox('Box 3', _getBoxColor('Box 3'))),
+                    SizedBox(width: 8),
+                    Expanded(child: _buildBox('Box 4', _getBoxColor('Box 4'))),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ),
     );
+  }
+
+  Widget _buildBox(String title, Color statusColor) {
+    final double screenWidth = MediaQuery.of(context).size.width;
+    final bool isMobile = screenWidth < 600;
+
+    // Get analytics data based on box title
+    Map<String, dynamic> boxData = _getBoxAnalytics(title);
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.blue.shade50,
+            Colors.blue.shade100,
+            Colors.blueAccent.withValues(alpha: 0.15),
+          ],
+          stops: const [0.0, 0.5, 1.0],
+        ),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: statusColor.withValues(alpha: 0.8),
+          width: 2.0,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: statusColor.withValues(alpha: 0.4),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(isMobile ? 8.0 : 12.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Status indicator dot
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: statusColor,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: statusColor.withValues(alpha: 0.5),
+                    blurRadius: 4,
+                    spreadRadius: 1,
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: isMobile ? 4 : 6),
+            Text(
+              boxData['title'] ?? title,
+              style: TextStyle(
+                color: Colors.blueGrey.shade800,
+                fontSize: isMobile ? 12 : 14,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: isMobile ? 4 : 8),
+            Text(
+              boxData['value'] ?? 'N/A',
+              style: TextStyle(
+                color: Colors.blueGrey.shade900,
+                fontSize: isMobile ? 16 : 20,
+                fontWeight: FontWeight.w600,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            if (boxData['subtitle'] != null) ...[
+              SizedBox(height: isMobile ? 2 : 4),
+              Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: isMobile ? 6 : 8,
+                  vertical: isMobile ? 2 : 3,
+                ),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: statusColor.withValues(alpha: 0.4),
+                    width: 1,
+                  ),
+                ),
+                child: Text(
+                  boxData['subtitle'],
+                  style: TextStyle(
+                    color: statusColor.withValues(alpha: 0.9),
+                    fontSize: isMobile ? 9 : 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Color _getBoxColor(String boxTitle) {
+    if (dashboardData == null) {
+      return Colors.grey;
+    }
+
+    switch (boxTitle) {
+      case 'Box 1':
+      // Temperature color coding
+        final temp = dashboardData!['temperature'];
+        if (temp != null) {
+          double tempValue = double.tryParse(temp.toString()) ?? 0.0;
+          if (tempValue > 40) {
+            return Colors.red; // High temperature
+          } else if (tempValue < 10) {
+            return Colors.blue; // Low temperature
+          }
+        }
+        return Colors.green; // Normal temperature
+
+      case 'Box 2':
+      // RPM color coding
+        final rpm = dashboardData!['rpm'];
+        if (rpm != null) {
+          double rpmValue = double.tryParse(rpm.toString()) ?? 0.0;
+          if (rpmValue > 2000) {
+            return Colors.orange; // High RPM
+          } else if (rpmValue < 500) {
+            return Colors.blue; // Low RPM
+          }
+        }
+        return Colors.green; // Normal RPM
+
+      case 'Box 3':
+      // Air Quality color coding
+        final airQuality = dashboardData!['airquality'];
+        if (airQuality != null) {
+          double aqValue = double.tryParse(airQuality.toString()) ?? 0.0;
+          if (aqValue > 500) {
+            return Colors.red; // Poor air quality
+          } else if (aqValue > 300) {
+            return Colors.orange; // Moderate air quality
+          }
+        }
+        return Colors.green; // Good air quality
+
+      case 'Box 4':
+      // Engine Status color coding
+        final vibration = dashboardData!['vibration'];
+        if (vibration != null) {
+          double vibValue = double.tryParse(vibration.toString()) ?? 0.0;
+          if (vibValue > 10) {
+            return Colors.red; // Engine failure
+          }
+        }
+        return Colors.green; // Engine stable
+
+      default:
+        return Colors.grey;
+    }
+  }
+
+  Map<String, dynamic> _getBoxAnalytics(String boxTitle) {
+    if (dashboardData == null) {
+      return {'title': boxTitle, 'value': 'Loading...'};
+    }
+
+    switch (boxTitle) {
+      case 'Box 1':
+      // Temperature Analysis
+        final temp = dashboardData!['temperature'];
+        String status = 'Normal';
+        if (temp != null) {
+          double tempValue = double.tryParse(temp.toString()) ?? 0.0;
+          if (tempValue > 40) {
+            status = 'High';
+          } else if (tempValue < 10) {
+            status = 'Low';
+          }
+        }
+        return {
+          'title': 'Temperature',
+          'value': '${temp ?? 'N/A'}°C',
+          'subtitle': status,
+        };
+
+      case 'Box 2':
+      // RPM Analysis
+        final rpm = dashboardData!['rpm'];
+        String status = 'Normal';
+        if (rpm != null) {
+          double rpmValue = double.tryParse(rpm.toString()) ?? 0.0;
+          if (rpmValue > 2000) {
+            status = 'High Speed';
+          } else if (rpmValue < 500) {
+            status = 'Low Speed';
+          }
+        }
+        return {
+          'title': 'RPM',
+          'value': '${rpm ?? 'N/A'}',
+          'subtitle': status,
+        };
+
+      case 'Box 3':
+      // Air Quality Analysis
+        final airQuality = dashboardData!['airquality'];
+        String status = 'Good';
+        if (airQuality != null) {
+          double aqValue = double.tryParse(airQuality.toString()) ?? 0.0;
+          if (aqValue > 500) {
+            status = 'Poor';
+          } else if (aqValue > 300) {
+            status = 'Moderate';
+          }
+        }
+        return {
+          'title': 'Air Quality',
+          'value': '${airQuality ?? 'N/A'} ppm',
+          'subtitle': status,
+        };
+
+      case 'Box 4':
+      // Engine Status based on vibration
+        final vibration = dashboardData!['vibration'];
+        String status = 'Stable';
+        String statusText = 'Engine Running Stable';
+
+        if (vibration != null) {
+          double vibValue = double.tryParse(vibration.toString()) ?? 0.0;
+          if (vibValue > 10) {
+            status = 'FAILURE';
+            statusText = 'Engine Failure';
+          }
+        }
+
+        return {
+          'title': 'Engine Status',
+          'value': status,
+          'subtitle': statusText,
+        };
+
+      default:
+        return {'title': boxTitle, 'value': 'N/A'};
+    }
   }
 
   // Helper method for section 3 - Data Table
@@ -373,6 +649,7 @@ class _DashboardPageState extends State<DashboardPage> {
       return Container(
         margin: EdgeInsets.all(isMobile ? 4.0 : 8.0),
         child: Card(
+          color: Colors.white,
           elevation: 4,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
