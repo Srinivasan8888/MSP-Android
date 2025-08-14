@@ -17,7 +17,6 @@ class _QrPageState extends State<QrPage> {
 
   @override
   void dispose() {
-    controller?.dispose();
     super.dispose();
   }
 
@@ -60,43 +59,53 @@ class _QrPageState extends State<QrPage> {
           Expanded(
             flex: 1,
             child: Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(12),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   if (result != null)
-                    Column(
-                      children: [
-                        const Text(
-                          'Scanned Result:',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
+                    Flexible(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'Scanned Result:',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          result!,
-                          style: const TextStyle(fontSize: 14),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: () {
-                            setState(() {
-                              result = null;
-                            });
-                            controller?.resumeCamera();
-                          },
-                          child: const Text('Scan Again'),
-                        ),
-                      ],
+                          const SizedBox(height: 6),
+                          Flexible(
+                            child: Text(
+                              result!,
+                              style: const TextStyle(fontSize: 14),
+                              textAlign: TextAlign.center,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          ElevatedButton(
+                            onPressed: () {
+                              setState(() {
+                                result = null;
+                              });
+                              controller?.resumeCamera();
+                            },
+                            child: const Text('Scan Again'),
+                          ),
+                        ],
+                      ),
                     )
                   else
-                    const Text(
-                      'Point your camera at a QR code',
-                      style: TextStyle(fontSize: 16, color: Colors.grey),
-                      textAlign: TextAlign.center,
+                    const Flexible(
+                      child: Text(
+                        'Point your camera at a QR code',
+                        style: TextStyle(fontSize: 16, color: Colors.grey),
+                        textAlign: TextAlign.center,
+                      ),
                     ),
                 ],
               ),
@@ -114,7 +123,7 @@ class _QrPageState extends State<QrPage> {
         result = scanData.code;
       });
       controller.pauseCamera();
-      
+
       // Save scanned result to memory and navigate to dashboard
       if (scanData.code != null) {
         ApiService.setScannedUserId(scanData.code!);

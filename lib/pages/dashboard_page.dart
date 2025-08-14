@@ -83,87 +83,238 @@ class _DashboardPageState extends State<DashboardPage> {
     final bool isTablet = screenSize.width >= 600;
 
     if (isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     // Metrics list with name, icon, and live values (latest = first element in arrays)
     final List<Map<String, dynamic>> metrics = [
-      {'name': 'Vibration', 'icon': Icons.vibration, 'value': _getLatestValue('vibration', 'm/s²')},
-      {'name': 'Magnetic Flux', 'icon': Icons.explore, 'value': _getLatestValue('magneticflux', 'µT')},
-      {'name': 'RPM', 'icon': Icons.rotate_right, 'value': _getLatestValue('rpm', 'RPM')},
-      {'name': 'Acoustics', 'icon': Icons.speaker, 'value': _getLatestValue('acoustics', 'dB')},
-      {'name': 'Temperature', 'icon': Icons.thermostat, 'value': _getLatestValue('temperature', '°C')},
-      {'name': 'Humidity', 'icon': Icons.water_drop, 'value': _getLatestValue('humidity', '%')},
-      {'name': 'Pressure', 'icon': Icons.compress, 'value': _getLatestValue('pressure', 'hPa')},
-      {'name': 'Altitude', 'icon': Icons.terrain, 'value': _getLatestValue('altitude', 'm')},
-      {'name': 'Air Quality', 'icon': Icons.air, 'value': _getLatestValue('airquality', 'ppm')},
+      {
+        'name': 'Vibration',
+        'icon': Icons.vibration,
+        'value': _getLatestValue('vibration', 'm/s²'),
+      },
+      {
+        'name': 'Magnetic Flux',
+        'icon': Icons.explore,
+        'value': _getLatestValue('magneticflux', 'µT'),
+      },
+      {
+        'name': 'RPM',
+        'icon': Icons.rotate_right,
+        'value': _getLatestValue('rpm', 'RPM'),
+      },
+      {
+        'name': 'Acoustics',
+        'icon': Icons.speaker,
+        'value': _getLatestValue('acoustics', 'dB'),
+      },
+      {
+        'name': 'Temperature',
+        'icon': Icons.thermostat,
+        'value': _getLatestValue('temperature', '°C'),
+      },
+      {
+        'name': 'Humidity',
+        'icon': Icons.water_drop,
+        'value': _getLatestValue('humidity', '%'),
+      },
+      {
+        'name': 'Pressure',
+        'icon': Icons.compress,
+        'value': _getLatestValue('pressure', 'hPa'),
+      },
+      {
+        'name': 'Altitude',
+        'icon': Icons.terrain,
+        'value': _getLatestValue('altitude', 'm'),
+      },
+      {
+        'name': 'Air Quality',
+        'icon': Icons.air,
+        'value': _getLatestValue('airquality', 'ppm'),
+      },
     ];
 
-    // Widget for metrics grid section
-    Widget buildMetricsSection() {
-      // Responsive breakpoints
-      final double screenWidth = MediaQuery.of(context).size.width;
-      bool isMobile = screenWidth < 600;
-
-      // Dynamic grid configuration based on screen size - Alway
-      int crossAxisCount = 2;
-      double childAspectRatio = 1.1;
-      double iconSize = 20;
-      double titleFontSize = 10;
-      double valueFontSize = 12;
-      EdgeInsets cardPadding = const EdgeInsets.all(4.0);
-
-      if (screenWidth < 400) {
-        // Small mobile phones
-        crossAxisCount = 2;
-        childAspectRatio = 1.1;
-        iconSize = 20;
-        titleFontSize = 10;
-        valueFontSize = 12;
-        cardPadding = const EdgeInsets.all(4.0);
-      } else if (screenWidth < 600) {
-        // Regular mobile phones
-        crossAxisCount = 2;
-        childAspectRatio = 1.2;
-        iconSize = 24;
-        titleFontSize = 11;
-        valueFontSize = 13;
-        cardPadding = const EdgeInsets.all(6.0);
-      } else if (screenWidth < 900) {
-        // Tablets portrait
-        crossAxisCount = 3;
-        childAspectRatio = 1.3;
-        iconSize = 28;
-        titleFontSize = 13;
-        valueFontSize = 15;
-        cardPadding = const EdgeInsets.all(8.0);
-      } else {
-        // Tablets landscape / Desktop
-        crossAxisCount = 5;
-        childAspectRatio = 1;
-        iconSize = 32;
-        titleFontSize = 14;
-        valueFontSize = 16;
-        cardPadding = const EdgeInsets.all(10.0);
-      }
-
-      return Container(
-        margin: EdgeInsets.all(isMobile ? 4.0 : 8.0),
-        child: Card(
-          elevation: 4,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+    return Scaffold(
+      appBar: AppBar(
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Dashboard'),
+            Text(
+              'User ID: ${ApiService.getScannedUserId() ?? 'N/A'}',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.refresh),
+            onPressed: () {
+              setState(() {
+                isLoading = true;
+              });
+              _loadDashboardData();
+              _loadChartData();
+            },
           ),
-          child: Padding(
-            padding: cardPadding,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
+          IconButton(
+            icon: const Icon(Icons.qr_code_scanner),
+            onPressed: () {
+              Navigator.pushReplacementNamed(context, '/qrpage');
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: () {
+              Navigator.pushReplacementNamed(context, '/');
+            },
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: isTablet
+            ? Column(
+                children: [
+                  // Tablet layout - 2x2 grid
+                  Expanded(
+                    flex: 2,
+                    child: Row(
+                      children: [
+                        Expanded(child: buildMetricsSection(metrics)),
+                        Expanded(child: buildSection2()),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: Row(
+                      children: [
+                        Expanded(child: buildSection3()),
+                        Expanded(child: buildSection4()),
+                      ],
+                    ),
+                  ),
+                ],
+              )
+            : SingleChildScrollView(
+                padding: EdgeInsets.all(screenSize.width < 350 ? 2.0 : 4.0),
+                physics: const BouncingScrollPhysics(),
+                child: Column(
+                  children: [
+                    // Mobile layout - single column with dynamic heights
+                    buildMetricsSection(metrics),
+                    SizedBox(height: screenSize.width < 350 ? 6 : 8),
+                    SizedBox(
+                      height: screenSize.width < 350 ? 140 : 240,
+                      child: buildSection2(),
+                    ),
+                    SizedBox(height: screenSize.width < 350 ? 6 : 8),
+                    SizedBox(
+                      height: screenSize.width < 350 ? 280 : 320,
+                      child: buildSection3(),
+                    ),
+                    SizedBox(height: screenSize.width < 350 ? 6 : 8),
+                    SizedBox(
+                      height: screenSize.width < 350 ? 280 : 320,
+                      child: buildSection4(),
+                    ),
+                    SizedBox(
+                      height: screenSize.width < 350 ? 12 : 16,
+                    ), // Bottom padding
+                  ],
+                ),
+              ),
+      ),
+    );
+  }
 
-                const SizedBox(height: 8),
-                GridView.count(
+  // Widget for metrics grid section
+  Widget buildMetricsSection(List<Map<String, dynamic>> metrics) {
+    // Responsive breakpoints
+    final double screenWidth = MediaQuery.of(context).size.width;
+    bool isMobile = screenWidth < 600;
+
+    // Dynamic grid configuration based on screen size - INCREASED FONT SIZES
+    int crossAxisCount = 2;
+    double childAspectRatio = 1.1;
+    double iconSize = 24;
+    double titleFontSize = 14;
+    double valueFontSize = 16;
+    EdgeInsets cardPadding = const EdgeInsets.all(8.0);
+
+    if (screenWidth < 350) {
+      // Very small mobile phones - INCREASED SIZES
+      crossAxisCount = 2;
+      childAspectRatio = 1.0;
+      iconSize = 22;
+      titleFontSize = 12;
+      valueFontSize = 14;
+      cardPadding = const EdgeInsets.all(6.0);
+    } else if (screenWidth < 400) {
+      // Small mobile phones - INCREASED SIZES
+      crossAxisCount = 2;
+      childAspectRatio = 1.1;
+      iconSize = 26;
+      titleFontSize = 14;
+      valueFontSize = 16;
+      cardPadding = const EdgeInsets.all(8.0);
+    } else if (screenWidth < 600) {
+      // Regular mobile phones - INCREASED SIZES
+      crossAxisCount = 2;
+      childAspectRatio = 1.2;
+      iconSize = 30;
+      titleFontSize = 16;
+      valueFontSize = 18;
+      cardPadding = const EdgeInsets.all(10.0);
+    } else if (screenWidth < 900) {
+      // Tablets portrait - INCREASED SIZES
+      crossAxisCount = 3;
+      childAspectRatio = 1.3;
+      iconSize = 32;
+      titleFontSize = 16;
+      valueFontSize = 18;
+      cardPadding = const EdgeInsets.all(12.0);
+    } else {
+      // Tablets landscape / Desktop - INCREASED SIZES
+      crossAxisCount = 5;
+      childAspectRatio = .9;
+      iconSize = 32;
+      titleFontSize = 16;
+      valueFontSize = 18;
+      cardPadding = const EdgeInsets.all(16.0);
+    }
+
+    // Calculate grid height for mobile layout
+    final rows = (metrics.length / crossAxisCount).ceil();
+    final itemWidth =
+        (screenWidth -
+            (isMobile ? 16.0 : 32.0) -
+            ((crossAxisCount - 1) * (isMobile ? 8 : 12))) /
+        crossAxisCount;
+    final itemHeight = itemWidth / childAspectRatio;
+    final gridHeight =
+        (itemHeight * rows) +
+        ((rows - 1) * (isMobile ? 8 : 12)) +
+        40; // 40 for padding
+
+    return Container(
+      margin: EdgeInsets.all(isMobile ? 4.0 : 8.0),
+      height: isMobile ? gridHeight : null, // Set height only for mobile
+      child: Card(
+        elevation: 4,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: cardPadding,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
+              Expanded(
+                child: GridView.count(
                   crossAxisCount: crossAxisCount,
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
@@ -246,96 +397,6 @@ class _DashboardPageState extends State<DashboardPage> {
                     );
                   }).toList(),
                 ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Dashboard'),
-            Text(
-              'User ID: ${ApiService.getScannedUserId() ?? 'N/A'}',
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.refresh),
-            onPressed: () {
-              setState(() {
-                isLoading = true;
-              });
-              _loadDashboardData();
-              _loadChartData();
-            },
-          ),
-
-          IconButton(
-            icon: const Icon(Icons.qr_code_scanner),
-            onPressed: () {
-              Navigator.pushReplacementNamed(context, '/qrpage');
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () {
-              Navigator.pushReplacementNamed(context, '/');
-            },
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: isTablet
-            ? Column(
-          children: [
-            // Tablet layout - 2x2 grid
-            Expanded(
-              flex: 2,
-              child: Row(
-                children: [
-                  Expanded(child: buildMetricsSection()),
-                  Expanded(child: buildSection2()),
-                ],
-              ),
-            ),
-            Expanded(
-              flex: 2,
-              child: Row(
-                children: [
-                  Expanded(child: buildSection3()),
-                  Expanded(child: buildSection4()),
-                ],
-              ),
-            ),
-          ],
-        )
-            : SingleChildScrollView(
-          padding: const EdgeInsets.all(8.0),
-          child: Column(
-            children: [
-              // Mobile layout - single column with fixed heights
-              SizedBox(
-                height: 400,
-                child: buildMetricsSection(),
-              ),
-              SizedBox(
-                height: 150,
-                child: buildSection2(),
-              ),
-              SizedBox(
-                height: 300,
-                child: buildSection3(),
-              ),
-              SizedBox(
-                height: 250,
-                child: buildSection4(),
               ),
             ],
           ),
@@ -351,37 +412,75 @@ class _DashboardPageState extends State<DashboardPage> {
 
     return Container(
       margin: EdgeInsets.all(isMobile ? 4.0 : 8.0),
+
       child: Card(
         elevation: 4,
         color: Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Padding(
-          padding: EdgeInsets.all(isMobile ? 8.0 : 16.0),
-          child: Column(
-            children: [
-              Expanded(
-                child: Row(
+          padding: EdgeInsets.all(isMobile ? 8.0 : 12.0),
+          child: isMobile
+              ? SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildBox('Box 1', _getBoxColor('Box 1')),
+                          ),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: _buildBox('Box 2', _getBoxColor('Box 2')),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildBox('Box 3', _getBoxColor('Box 3')),
+                          ),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: _buildBox('Box 4', _getBoxColor('Box 4')),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                )
+              : Column(
                   children: [
-                    Expanded(child: _buildBox('Box 1', _getBoxColor('Box 1'))),
-                    SizedBox(width: 8),
-                    Expanded(child: _buildBox('Box 2', _getBoxColor('Box 2'))),
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _buildBox('Box 1', _getBoxColor('Box 1')),
+                          ),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: _buildBox('Box 2', _getBoxColor('Box 2')),
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(height: 12),
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _buildBox('Box 3', _getBoxColor('Box 3')),
+                          ),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: _buildBox('Box 4', _getBoxColor('Box 4')),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
-              ),
-              SizedBox(height: 8),
-              Expanded(
-                child: Row(
-                  children: [
-                    Expanded(child: _buildBox('Box 3', _getBoxColor('Box 3'))),
-                    SizedBox(width: 8),
-                    Expanded(child: _buildBox('Box 4', _getBoxColor('Box 4'))),
-                  ],
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );
@@ -390,11 +489,22 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget _buildBox(String title, Color statusColor) {
     final double screenWidth = MediaQuery.of(context).size.width;
     final bool isMobile = screenWidth < 600;
+    final bool isTablet = screenWidth >= 600 && screenWidth < 900;
 
     // Get analytics data based on box title
     Map<String, dynamic> boxData = _getBoxAnalytics(title);
 
+    // Responsive font sizes - OPTIMIZED FOR MOBILE
+    double titleFontSize = isMobile ? 14 : (isTablet ? 16 : 18);
+    double valueFontSize = isMobile ? 18 : (isTablet ? 20 : 24);
+    double subtitleFontSize = isMobile ? 11 : (isTablet ? 12 : 14);
+    double dotSize = isMobile ? 8 : (isTablet ? 8 : 10);
+    double padding = isMobile ? 12.0 : (isTablet ? 12.0 : 16.0);
+
     return Container(
+      height: isMobile
+          ? 100
+          : null, // Set specific height for each box on mobile
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -409,81 +519,97 @@ class _DashboardPageState extends State<DashboardPage> {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: statusColor.withValues(alpha: 0.8),
-          width: 2.0,
+          width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
-            color: statusColor.withValues(alpha: 0.4),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
+            color: statusColor.withValues(alpha: 0.3),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
             spreadRadius: 1,
           ),
         ],
       ),
       child: Padding(
-        padding: EdgeInsets.all(isMobile ? 8.0 : 12.0),
+        padding: EdgeInsets.all(padding),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          mainAxisSize: MainAxisSize.min,
           children: [
             // Status indicator dot
             Container(
-              width: 8,
-              height: 8,
+              width: dotSize,
+              height: dotSize,
               decoration: BoxDecoration(
                 color: statusColor,
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
                     color: statusColor.withValues(alpha: 0.5),
-                    blurRadius: 4,
-                    spreadRadius: 1,
+                    blurRadius: 2,
+                    spreadRadius: 0.5,
                   ),
                 ],
               ),
             ),
             SizedBox(height: isMobile ? 4 : 6),
-            Text(
-              boxData['title'] ?? title,
-              style: TextStyle(
-                color: Colors.blueGrey.shade800,
-                fontSize: isMobile ? 12 : 14,
-                fontWeight: FontWeight.bold,
+            // Title
+            Flexible(
+              child: Text(
+                boxData['title'] ?? title,
+                style: TextStyle(
+                  color: Colors.blueGrey.shade800,
+                  fontSize: titleFontSize,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              textAlign: TextAlign.center,
             ),
-            SizedBox(height: isMobile ? 4 : 8),
-            Text(
-              boxData['value'] ?? 'N/A',
-              style: TextStyle(
-                color: Colors.blueGrey.shade900,
-                fontSize: isMobile ? 16 : 20,
-                fontWeight: FontWeight.w600,
+            SizedBox(height: isMobile ? 2 : 4),
+            // Value
+            Flexible(
+              child: Text(
+                boxData['value'] ?? 'N/A',
+                style: TextStyle(
+                  color: Colors.blueGrey.shade900,
+                  fontSize: valueFontSize,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              textAlign: TextAlign.center,
             ),
+            // Subtitle
             if (boxData['subtitle'] != null) ...[
               SizedBox(height: isMobile ? 2 : 4),
-              Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: isMobile ? 6 : 8,
-                  vertical: isMobile ? 2 : 3,
-                ),
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: statusColor.withValues(alpha: 0.4),
-                    width: 1,
+              Flexible(
+                child: Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isMobile ? 4 : 6,
+                    vertical: isMobile ? 2 : 3,
                   ),
-                ),
-                child: Text(
-                  boxData['subtitle'],
-                  style: TextStyle(
-                    color: statusColor.withValues(alpha: 0.9),
-                    fontSize: isMobile ? 9 : 11,
-                    fontWeight: FontWeight.w600,
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: statusColor.withValues(alpha: 0.5),
+                      width: 0.5,
+                    ),
                   ),
-                  textAlign: TextAlign.center,
+                  child: Text(
+                    boxData['subtitle'],
+                    style: TextStyle(
+                      color: statusColor.withValues(alpha: 0.9),
+                      fontSize: subtitleFontSize,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
             ],
@@ -500,7 +626,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
     switch (boxTitle) {
       case 'Box 1':
-      // Temperature color coding
+        // Temperature color coding
         final temp = dashboardData!['temperature'];
         if (temp != null) {
           double tempValue = double.tryParse(temp.toString()) ?? 0.0;
@@ -513,7 +639,7 @@ class _DashboardPageState extends State<DashboardPage> {
         return Colors.green; // Normal temperature
 
       case 'Box 2':
-      // RPM color coding
+        // RPM color coding
         final rpm = dashboardData!['rpm'];
         if (rpm != null) {
           double rpmValue = double.tryParse(rpm.toString()) ?? 0.0;
@@ -526,7 +652,7 @@ class _DashboardPageState extends State<DashboardPage> {
         return Colors.green; // Normal RPM
 
       case 'Box 3':
-      // Air Quality color coding
+        // Air Quality color coding
         final airQuality = dashboardData!['airquality'];
         if (airQuality != null) {
           double aqValue = double.tryParse(airQuality.toString()) ?? 0.0;
@@ -539,7 +665,7 @@ class _DashboardPageState extends State<DashboardPage> {
         return Colors.green; // Good air quality
 
       case 'Box 4':
-      // Engine Status color coding
+        // Engine Status color coding
         final vibration = dashboardData!['vibration'];
         if (vibration != null) {
           double vibValue = double.tryParse(vibration.toString()) ?? 0.0;
@@ -561,7 +687,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
     switch (boxTitle) {
       case 'Box 1':
-      // Temperature Analysis
+        // Temperature Analysis
         final temp = dashboardData!['temperature'];
         String status = 'Normal';
         if (temp != null) {
@@ -579,7 +705,7 @@ class _DashboardPageState extends State<DashboardPage> {
         };
 
       case 'Box 2':
-      // RPM Analysis
+        // RPM Analysis
         final rpm = dashboardData!['rpm'];
         String status = 'Normal';
         if (rpm != null) {
@@ -590,14 +716,10 @@ class _DashboardPageState extends State<DashboardPage> {
             status = 'Low Speed';
           }
         }
-        return {
-          'title': 'RPM',
-          'value': '${rpm ?? 'N/A'}',
-          'subtitle': status,
-        };
+        return {'title': 'RPM', 'value': '${rpm ?? 'N/A'}', 'subtitle': status};
 
       case 'Box 3':
-      // Air Quality Analysis
+        // Air Quality Analysis
         final airQuality = dashboardData!['airquality'];
         String status = 'Good';
         if (airQuality != null) {
@@ -615,7 +737,7 @@ class _DashboardPageState extends State<DashboardPage> {
         };
 
       case 'Box 4':
-      // Engine Status based on vibration
+        // Engine Status based on vibration
         final vibration = dashboardData!['vibration'];
         String status = 'Stable';
         String statusText = 'Engine Running Stable';
@@ -678,20 +800,18 @@ class _DashboardPageState extends State<DashboardPage> {
       margin: EdgeInsets.all(isMobile ? 4.0 : 8.0),
       child: Card(
         elevation: 4,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Padding(
           padding: EdgeInsets.all(isMobile ? 6.0 : 8.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Padding(
-                padding: EdgeInsets.all(isMobile ? 6.0 : 8.0),
+                padding: EdgeInsets.all(isMobile ? 8.0 : 12.0),
                 child: Text(
                   'All Data Records',
                   style: TextStyle(
-                    fontSize: isMobile ? 16 : 18,
+                    fontSize: isMobile ? 18 : 22,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -709,7 +829,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             column.toUpperCase(),
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
-                              fontSize: isMobile ? 10 : 12,
+                              fontSize: isMobile ? 14 : 16,
                             ),
                           ),
                         );
@@ -721,7 +841,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             return DataCell(
                               Text(
                                 dataItem[column]?.toString() ?? 'N/A',
-                                style: TextStyle(fontSize: isMobile ? 9 : 11),
+                                style: TextStyle(fontSize: isMobile ? 13 : 15),
                               ),
                             );
                           }).toList(),
@@ -748,27 +868,27 @@ class _DashboardPageState extends State<DashboardPage> {
       child: Card(
         elevation: 4,
         color: Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: EdgeInsets.all(isMobile ? 8.0 : 16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'Chart Data',
-                    style: TextStyle(
-                      fontSize: isMobile ? 18 : 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
+                  Flexible(
+                    child: Text(
+                      'Chart Data',
+                      style: TextStyle(
+                        fontSize: isMobile ? 20 : 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    padding: EdgeInsets.symmetric(horizontal: isMobile ? 6 : 8),
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.grey.shade300),
                       borderRadius: BorderRadius.circular(6),
@@ -782,7 +902,7 @@ class _DashboardPageState extends State<DashboardPage> {
                           value: parameter,
                           child: Text(
                             parameter,
-                            style: const TextStyle(fontSize: 12),
+                            style: TextStyle(fontSize: isMobile ? 10 : 12),
                           ),
                         );
                       }).toList(),
@@ -798,7 +918,7 @@ class _DashboardPageState extends State<DashboardPage> {
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: isMobile ? 8 : 16),
               Expanded(
                 child: isChartLoading
                     ? const Center(child: CircularProgressIndicator())
@@ -813,16 +933,12 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Widget _buildChart() {
     if (chartData == null || chartData!['chartPoints'] == null) {
-      return const Center(
-        child: Text('No chart data available'),
-      );
+      return const Center(child: Text('No chart data available'));
     }
 
     final List<dynamic> chartPoints = chartData!['chartPoints'];
     if (chartPoints.isEmpty) {
-      return const Center(
-        child: Text('No data points available'),
-      );
+      return const Center(child: Text('No data points available'));
     }
 
     List<FlSpot> spots = [];
@@ -840,9 +956,7 @@ class _DashboardPageState extends State<DashboardPage> {
     }
 
     if (spots.isEmpty) {
-      return const Center(
-        child: Text('No valid data for selected parameter'),
-      );
+      return const Center(child: Text('No valid data for selected parameter'));
     }
 
     // Add some padding to the Y axis range
@@ -857,7 +971,108 @@ class _DashboardPageState extends State<DashboardPage> {
           show: true,
           drawVerticalLine: true,
           drawHorizontalLine: true,
-          horizontalInterval: (adjustedMaxY - adjustedMinY) > 0 ? (adjustedMaxY - adjustedMinY) / 5 : 1,
+          horizontalInterval: (maxY - minY) / 5,
+          verticalInterval: spots.length > 10 ? spots.length / 5 : 1,
+          getDrawingHorizontalLine: (value) {
+            return FlLine(color: Colors.grey.shade300, strokeWidth: 1);
+          },
+          getDrawingVerticalLine: (value) {
+            return FlLine(color: Colors.grey.shade300, strokeWidth: 1);
+          },
+        ),
+        titlesData: FlTitlesData(
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 40,
+              getTitlesWidget: (value, meta) {
+                return Text(
+                  value.toStringAsFixed(1),
+                  style: const TextStyle(fontSize: 10),
+                );
+              },
+            ),
+          ),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 30,
+              getTitlesWidget: (value, meta) {
+                final index = value.toInt();
+                if (index >= 0 && index < chartPoints.length) {
+                  return Text(
+                    '${index + 1}',
+                    style: const TextStyle(fontSize: 10),
+                  );
+                }
+                return const Text('');
+              },
+            ),
+          ),
+          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        ),
+        borderData: FlBorderData(
+          show: true,
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+        minX: 0,
+        maxX: (spots.length - 1).toDouble(),
+        minY: adjustedMinY,
+        maxY: adjustedMaxY,
+        lineBarsData: [
+          LineChartBarData(
+            spots: spots,
+            isCurved: true,
+            color: Colors.blueAccent,
+            barWidth: 3,
+            dotData: FlDotData(
+              show: true,
+              getDotPainter: (spot, percent, barData, index) {
+                return FlDotCirclePainter(
+                  radius: 4,
+                  color: Colors.blueAccent,
+                  strokeWidth: 2,
+                  strokeColor: Colors.white,
+                );
+              },
+            ),
+            belowBarData: BarAreaData(
+              show: true,
+              color: Colors.blueAccent.withValues(alpha: 0.1),
+            ),
+          ),
+        ],
+        lineTouchData: LineTouchData(
+          enabled: true,
+          touchTooltipData: LineTouchTooltipData(
+            getTooltipItems: (touchedSpots) {
+              return touchedSpots.map((spot) {
+                final index = spot.x.toInt();
+                if (index >= 0 && index < chartPoints.length) {
+                  final point = chartPoints[index] as Map<String, dynamic>;
+                  return LineTooltipItem(
+                    '${selectedParameter.toUpperCase()}\nValue: ${spot.y.toStringAsFixed(2)}\nPoint: ${index + 1}',
+                    const TextStyle(color: Colors.white, fontSize: 12),
+                  );
+                }
+                return null;
+              }).toList();
+            },
+          ),
+        ),
+      ),
+    );
+
+    return LineChart(
+      LineChartData(
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: true,
+          drawHorizontalLine: true,
+          horizontalInterval: (adjustedMaxY - adjustedMinY) > 0
+              ? (adjustedMaxY - adjustedMinY) / 5
+              : 1,
           verticalInterval: spots.length > 1 ? (spots.length - 1) / 5 : 1,
         ),
         titlesData: FlTitlesData(
