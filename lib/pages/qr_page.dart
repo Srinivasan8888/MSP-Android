@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:qr_code_scanner_plus/qr_code_scanner_plus.dart';
 import '../services/api_service.dart';
-import 'dashboard_page.dart';
+import 'main_navigation.dart';
 
 class QrPage extends StatefulWidget {
   const QrPage({super.key});
@@ -135,7 +135,7 @@ class _QrPageState extends State<QrPage> {
   void _navigateToDashboard() {
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (context) => const DashboardPage()),
+      MaterialPageRoute(builder: (context) => const MainNavigation()),
     );
   }
 }

@@ -109,7 +109,7 @@ class _DashboardPageState extends State<DashboardPage> {
         'value': _getLatestValue('acoustics', 'dB'),
       },
       {
-        'name': 'Temperature',
+        'name': 'Temp',
         'icon': Icons.thermostat,
         'value': _getLatestValue('temperature', '°C'),
       },
@@ -150,6 +150,7 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
           ],
         ),
+        automaticallyImplyLeading: false,
         actions: [
           IconButton(
             icon: Icon(Icons.refresh),
@@ -162,15 +163,9 @@ class _DashboardPageState extends State<DashboardPage> {
             },
           ),
           IconButton(
-            icon: const Icon(Icons.qr_code_scanner),
+            icon: const Icon(Icons.bluetooth_searching_sharp),
             onPressed: () {
-              Navigator.pushReplacementNamed(context, '/qrpage');
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () {
-              Navigator.pushReplacementNamed(context, '/');
+              Scaffold.of(context).openEndDrawer();
             },
           ),
         ],
@@ -229,6 +224,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 ),
               ),
       ),
+      endDrawer: _buildBluetoothSidebar(),
     );
   }
 
@@ -701,7 +697,7 @@ class _DashboardPageState extends State<DashboardPage> {
         return {
           'title': 'Temperature',
           'value': '${temp ?? 'N/A'}°C',
-          'subtitle': status,
+          'subtitle': 'N/A' ?? status,
         };
 
       case 'Box 2':
@@ -719,9 +715,9 @@ class _DashboardPageState extends State<DashboardPage> {
         return {'title': 'RPM', 'value': '${rpm ?? 'N/A'}', 'subtitle': status};
 
       case 'Box 3':
-        // Air Quality Analysis
         final airQuality = dashboardData!['airquality'];
         String status = 'Good';
+
         if (airQuality != null) {
           double aqValue = double.tryParse(airQuality.toString()) ?? 0.0;
           if (aqValue > 500) {
@@ -730,9 +726,10 @@ class _DashboardPageState extends State<DashboardPage> {
             status = 'Moderate';
           }
         }
+
         return {
           'title': 'Air Quality',
-          'value': '${airQuality ?? 'N/A'} ppm',
+          'value': airQuality != null ? '${airQuality} ppm' : 'N/A',
           'subtitle': status,
         };
 
@@ -1156,6 +1153,219 @@ class _DashboardPageState extends State<DashboardPage> {
             },
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildBluetoothSidebar() {
+    return Drawer(
+      width: 300,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Colors.blue.shade50, Colors.blue.shade100],
+          ),
+        ),
+        child: Column(
+          children: [
+            // Header
+            Container(
+              height: 120,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Colors.blue.shade600, Colors.blue.shade800],
+                ),
+              ),
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.bluetooth, color: Colors.white, size: 28),
+                          SizedBox(width: 12),
+                          Text(
+                            'Bluetooth Devices',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        'Manage connected sensors',
+                        style: TextStyle(color: Colors.white70, fontSize: 14),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            // Content
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Scan button
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          // Bluetooth scan functionality
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Scanning for devices...'),
+                              backgroundColor: Colors.blue,
+                            ),
+                          );
+                        },
+                        icon: Icon(Icons.search, color: Colors.white),
+                        label: Text(
+                          'Scan for Devices',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue.shade600,
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    SizedBox(height: 24),
+
+                    // Connected devices section
+                    Text(
+                      'Connected Devices',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey.shade800,
+                      ),
+                    ),
+
+                    SizedBox(height: 16),
+
+                    // Device list
+                    Expanded(
+                      child: ListView(
+                        children: [
+                          _buildDeviceItem(
+                            'Sensor Hub 01',
+                            'Connected',
+                            Icons.sensors,
+                            Colors.green,
+                            true,
+                          ),
+                          _buildDeviceItem(
+                            'Temperature Probe',
+                            'Connected',
+                            Icons.thermostat,
+                            Colors.green,
+                            true,
+                          ),
+                          _buildDeviceItem(
+                            'Vibration Monitor',
+                            'Disconnected',
+                            Icons.vibration,
+                            Colors.red,
+                            false,
+                          ),
+                          _buildDeviceItem(
+                            'Air Quality Sensor',
+                            'Connected',
+                            Icons.air,
+                            Colors.green,
+                            true,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDeviceItem(
+    String name,
+    String status,
+    IconData icon,
+    Color statusColor,
+    bool isConnected,
+  ) {
+    return Card(
+      margin: EdgeInsets.only(bottom: 8),
+      elevation: 2,
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: statusColor.withValues(alpha: 0.1),
+          child: Icon(icon, color: statusColor),
+        ),
+        title: Text(
+          name,
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+        ),
+        subtitle: Row(
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: statusColor,
+                shape: BoxShape.circle,
+              ),
+            ),
+            SizedBox(width: 8),
+            Text(
+              status,
+              style: TextStyle(
+                color: statusColor,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+        trailing: isConnected
+            ? IconButton(
+                icon: Icon(Icons.settings, size: 20),
+                onPressed: () {
+                  // Device settings
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Opening $name settings...')),
+                  );
+                },
+              )
+            : IconButton(
+                icon: Icon(Icons.refresh, size: 20),
+                onPressed: () {
+                  // Reconnect device
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Reconnecting to $name...')),
+                  );
+                },
+              ),
       ),
     );
   }

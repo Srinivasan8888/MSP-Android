@@ -37,6 +37,9 @@ dependencies:
   qr_code_scanner_plus: 2.0.10+1
   http: ^1.1.0
   fl_chart: ^0.68.0
+  flutter_blue_plus: ^1.35.5
+  url_launcher: ^6.3.2
+  shared_preferences: ^2.2.2
 
 dev_dependencies:
   flutter_test:
