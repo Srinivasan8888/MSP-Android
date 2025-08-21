@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import '../services/api_service.dart';
 
 class ReportPage extends StatefulWidget {
   const ReportPage({super.key});
@@ -37,48 +38,37 @@ class _ReportPageState extends State<ReportPage> {
   }
 
   Future<void> _loadReports() async {
-    // Simulate loading reports
-    await Future.delayed(const Duration(seconds: 1));
-    setState(() {
-      reports = [
-        {
-          'id': '1',
-          'title': 'Sensor Analysis Report',
-          'date': '2025-08-20',
-          'status': 'Completed',
-          'metric': 'Vibration',
-        },
-        {
-          'id': '2',
-          'title': 'Temperature Monitoring',
-          'date': '2025-08-19',
-          'status': 'In Progress',
-          'metric': 'Temperature',
-        },
-        {
-          'id': '3',
-          'title': 'RPM Performance Report',
-          'date': '2025-08-15',
-          'status': 'Completed',
-          'metric': 'RPM',
-        },
-        {
-          'id': '4',
-          'title': 'Air Quality Assessment',
-          'date': '2025-08-14',
-          'status': 'Completed',
-          'metric': 'Air Quality',
-        },
-        {
-          'id': '5',
-          'title': 'Pressure Monitoring',
-          'date': '2025-08-13',
-          'status': 'Failed',
-          'metric': 'Pressure',
-        },
-      ];
-      isLoading = false;
-    });
+    try {
+      final reportsData = await ApiService.getReports(
+        userId: ApiService.getScannedUserId(),
+        metric: selectedMetric,
+      );
+
+      if (mounted) {
+        setState(() {
+          if (reportsData != null) {
+            reports = reportsData;
+          } else {
+            // Fallback to empty list if API fails
+            reports = [];
+          }
+          isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          reports = [];
+          isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load reports: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _loadReportHistory() async {
@@ -98,32 +88,59 @@ class _ReportPageState extends State<ReportPage> {
     await prefs.setString('report_history', json.encode(reportHistory));
   }
 
-  void _updateReportStatus(String reportId, String newStatus) {
+  Future<void> _updateReportStatus(String reportId, String newStatus) async {
     final reportIndex = reports.indexWhere((r) => r['id'] == reportId);
     if (reportIndex != -1) {
       final report = reports[reportIndex];
       final oldStatus = report['status'];
 
-      // Add to history
-      final historyEntry = {
-        'reportId': reportId,
-        'reportTitle': report['title'],
-        'oldStatus': oldStatus,
-        'newStatus': newStatus,
-        'timestamp': DateTime.now().toIso8601String(),
-        'metric': report['metric'],
-      };
+      try {
+        // Update status via API
+        final success = await ApiService.updateReportStatus(
+          reportId: reportId,
+          status: newStatus,
+          userId: ApiService.getScannedUserId(),
+        );
 
-      setState(() {
-        reports[reportIndex]['status'] = newStatus;
-        reportHistory.insert(0, historyEntry);
-      });
+        if (success && mounted) {
+          // Add to history
+          final historyEntry = {
+            'reportId': reportId,
+            'reportTitle': report['title'],
+            'oldStatus': oldStatus,
+            'newStatus': newStatus,
+            'timestamp': DateTime.now().toIso8601String(),
+            'metric': report['metric'],
+          };
 
-      _saveReportHistory();
+          setState(() {
+            reports[reportIndex]['status'] = newStatus;
+            reportHistory.insert(0, historyEntry);
+          });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Status updated: $oldStatus → $newStatus')),
-      );
+          _saveReportHistory();
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Status updated: $oldStatus → $newStatus')),
+          );
+        } else if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to update report status'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error updating status: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
     }
   }
 
@@ -184,7 +201,9 @@ class _ReportPageState extends State<ReportPage> {
                         onChanged: (String? newValue) {
                           setState(() {
                             selectedMetric = newValue;
+                            isLoading = true;
                           });
+                          _loadReports();
                         },
                       ),
                     ),
@@ -385,13 +404,15 @@ class _ReportPageState extends State<ReportPage> {
               onPressed: () async {
                 final prefs = await SharedPreferences.getInstance();
                 await prefs.remove('report_history');
-                setState(() {
-                  reportHistory.clear();
-                });
-                Navigator.of(context).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('History cleared')),
-                );
+                if (mounted) {
+                  setState(() {
+                    reportHistory.clear();
+                  });
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('History cleared')),
+                  );
+                }
               },
               child: const Text('Clear History'),
             ),
@@ -430,25 +451,27 @@ class _ReportPageState extends State<ReportPage> {
 
       Navigator.of(context).pop(); // Close progress dialog
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.check_circle, color: Colors.white),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  selectedMetric != null
-                      ? 'Excel report for $selectedMetric downloaded successfully!'
-                      : 'Excel report for all metrics downloaded successfully!',
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    selectedMetric != null
+                        ? 'Excel report for $selectedMetric downloaded successfully!'
+                        : 'Excel report for all metrics downloaded successfully!',
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
           ),
-          backgroundColor: Colors.green,
-          duration: const Duration(seconds: 3),
-        ),
-      );
+        );
+      }
     });
   }
 }

@@ -52,17 +52,19 @@ class ApiService {
         // ------------------------------
         List<Map<String, dynamic>> filteredAllData = [];
         if (data['allData'] is List) {
-          filteredAllData = (data['allData'] as List)
-              .map<Map<String, dynamic>>((item) {
-            if (item is Map) {
-              final filteredItem = Map<String, dynamic>.from(
-                  item.map((key, value) => MapEntry(key.toString(), value)));
-              filteredItem.remove('signal');
-              filteredItem.remove('battery');
-              return filteredItem;
-            }
-            return <String, dynamic>{};
-          }).toList();
+          filteredAllData = (data['allData'] as List).map<Map<String, dynamic>>(
+            (item) {
+              if (item is Map) {
+                final filteredItem = Map<String, dynamic>.from(
+                  item.map((key, value) => MapEntry(key.toString(), value)),
+                );
+                filteredItem.remove('signal');
+                filteredItem.remove('battery');
+                return filteredItem;
+              }
+              return <String, dynamic>{};
+            },
+          ).toList();
         }
 
         // ------------------------------
@@ -98,13 +100,13 @@ class ApiService {
           'chartPoints': chartPoints,
           'parameter': selectedParam,
           'rawChartData': data['chartData'] ?? {},
-          'parameters': data['cardData']
-              ?.keys
-              .where((key) =>
-          key != 'signal' &&
-              key != 'battery' &&
-              key != 'time')
-              .toList() ??
+          'parameters':
+              data['cardData']?.keys
+                  .where(
+                    (key) =>
+                        key != 'signal' && key != 'battery' && key != 'time',
+                  )
+                  .toList() ??
               [],
         };
       }
@@ -114,4 +116,57 @@ class ApiService {
     return null;
   }
 
+  static Future<List<Map<String, dynamic>>?> getReports({
+    String? userId,
+    String? metric,
+  }) async {
+    try {
+      String url = '$baseUrl/getReports';
+      if (metric != null && metric != 'All') {
+        url += '?metric=${metric.toLowerCase()}';
+      }
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': userId ?? _scannedUserId ?? 'N/A',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['reports'] is List) {
+          return List<Map<String, dynamic>>.from(
+            data['reports'].map((report) => Map<String, dynamic>.from(report)),
+          );
+        }
+      }
+    } catch (e) {
+      print('Error in getReports: $e');
+    }
+    return null;
+  }
+
+  static Future<bool> updateReportStatus({
+    required String reportId,
+    required String status,
+    String? userId,
+  }) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/updateReportStatus'),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': userId ?? _scannedUserId ?? 'N/A',
+        },
+        body: json.encode({'reportId': reportId, 'status': status}),
+      );
+
+      return response.statusCode == 200;
+    } catch (e) {
+      print('Error in updateReportStatus: $e');
+      return false;
+    }
+  }
 }

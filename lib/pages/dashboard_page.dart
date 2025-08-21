@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'dart:async';
 import '../services/api_service.dart';
 
 class DashboardPage extends StatefulWidget {
@@ -10,11 +14,19 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   Map<String, dynamic>? dashboardData;
   Map<String, dynamic>? chartData;
   bool isLoading = true;
   bool isChartLoading = false;
   String selectedParameter = 'vibration';
+
+  // Bluetooth scanning state
+  bool isScanning = false;
+  List<ScanResult> availableDevices = <ScanResult>[];
+  List<BluetoothDevice> connectedDevices = <BluetoothDevice>[];
+  StreamSubscription<List<ScanResult>>? scanSubscription;
+  BluetoothAdapterState bluetoothState = BluetoothAdapterState.unknown;
 
   final List<String> chartParameters = [
     'vibration',
@@ -33,6 +45,71 @@ class _DashboardPageState extends State<DashboardPage> {
     super.initState();
     _loadDashboardData();
     _loadChartData();
+    _requestInitialPermissions();
+    _initBluetooth();
+  }
+
+  Future<void> _requestInitialPermissions() async {
+    // Request permissions on app start
+    await _requestAllPermissions();
+  }
+
+  @override
+  void dispose() {
+    scanSubscription?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _initBluetooth() async {
+    // Check if Bluetooth is supported
+    if (await FlutterBluePlus.isSupported == false) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Bluetooth not supported by this device'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Listen to Bluetooth state changes
+    FlutterBluePlus.adapterState.listen((state) {
+      setState(() {
+        bluetoothState = state;
+      });
+      if (state == BluetoothAdapterState.off) {
+        // Try to turn on Bluetooth which may trigger permission requests
+        _requestBluetoothEnable();
+      }
+    });
+
+    // Get connected devices
+    _getConnectedDevices();
+  }
+
+  Future<void> _requestBluetoothEnable() async {
+    try {
+      await FlutterBluePlus.turnOn();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Please enable Bluetooth manually'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+    }
+  }
+
+  Future<void> _getConnectedDevices() async {
+    try {
+      final List<BluetoothDevice> devices =
+          await FlutterBluePlus.connectedDevices;
+      setState(() {
+        connectedDevices = devices;
+      });
+    } catch (e) {
+      print('Error getting connected devices: $e');
+    }
   }
 
   Future<void> _loadDashboardData() async {
@@ -75,6 +152,303 @@ class _DashboardPageState extends State<DashboardPage> {
     }
     final value = dashboardData![key];
     return '$value $unit';
+  }
+
+  Future<void> _scanForDevices() async {
+    // Check if Bluetooth is enabled
+    if (bluetoothState != BluetoothAdapterState.on) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Please enable Bluetooth to scan for devices'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // Request permissions before scanning
+    if (!await _requestBluetoothPermissions()) {
+      return;
+    }
+
+    setState(() {
+      isScanning = true;
+      availableDevices.clear();
+    });
+
+    try {
+      // Start scanning
+      await FlutterBluePlus.startScan(
+        timeout: Duration(seconds: 10),
+        androidUsesFineLocation: true,
+      );
+
+      // Listen to scan results
+      scanSubscription = FlutterBluePlus.scanResults.listen((results) {
+        setState(() {
+          availableDevices = results;
+        });
+      });
+
+      // Wait for scan to complete
+      await Future.delayed(Duration(seconds: 10));
+
+      setState(() {
+        isScanning = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Found ${availableDevices.length} devices'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      setState(() {
+        isScanning = false;
+      });
+
+      String errorMessage = 'Error scanning: $e';
+      if (e.toString().contains('permission') ||
+          e.toString().contains('BLUETOOTH_SCAN')) {
+        errorMessage =
+            'Bluetooth scan permission required.\n\nPlease go to:\nSettings > Apps > MSP > Permissions\nand enable "Nearby devices" or "Location"';
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(errorMessage),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 8),
+          action: SnackBarAction(
+            label: 'OK',
+            textColor: Colors.white,
+            onPressed: () {},
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<bool> _requestAllPermissions() async {
+    try {
+      // Start with basic permissions that work on all Android versions
+      List<Permission> permissions = [Permission.location, Permission.storage];
+
+      // Add Bluetooth permissions (available on Android 12+)
+      try {
+        permissions.addAll([
+          Permission.bluetoothScan,
+          Permission.bluetoothConnect,
+        ]);
+      } catch (e) {
+        print('Bluetooth permissions not available on this Android version');
+      }
+
+      // Add granular media permissions for Android 13+ if available
+      if (await _isAndroid13OrHigher()) {
+        try {
+          permissions.addAll([
+            Permission.photos,
+            Permission.videos,
+            Permission.audio,
+          ]);
+        } catch (e) {
+          print('Granular media permissions not available');
+        }
+      }
+
+      // Request permissions
+      Map<Permission, PermissionStatus> statuses = await permissions.request();
+
+      // Check critical permissions
+      bool locationGranted =
+          statuses[Permission.location] == PermissionStatus.granted ||
+          statuses[Permission.location] == PermissionStatus.limited;
+
+      // Check Bluetooth permissions if they were requested
+      bool bluetoothGranted = true;
+      if (statuses.containsKey(Permission.bluetoothScan)) {
+        bluetoothGranted =
+            (statuses[Permission.bluetoothScan] == PermissionStatus.granted ||
+                statuses[Permission.bluetoothScan] ==
+                    PermissionStatus.limited) &&
+            (statuses[Permission.bluetoothConnect] ==
+                    PermissionStatus.granted ||
+                statuses[Permission.bluetoothConnect] ==
+                    PermissionStatus.limited);
+      }
+
+      if (!locationGranted || !bluetoothGranted) {
+        _showPermissionDialog();
+        return false;
+      }
+
+      return true;
+    } catch (e) {
+      print('Permission request error: $e');
+      _showPermissionDialog();
+      return false;
+    }
+  }
+
+  Future<bool> _requestBluetoothPermissions() async {
+    return await _requestAllPermissions();
+  }
+
+  Future<bool> _isAndroid13OrHigher() async {
+    try {
+      // Try to check if granular media permissions are available
+      await Permission.photos.status;
+      return true;
+    } catch (e) {
+      // If Permission.photos throws an error, we're on older Android
+      return false;
+    }
+  }
+
+  void _showPermissionDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Permissions Required'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'This app needs the following permissions to work properly:',
+              ),
+              SizedBox(height: 12),
+              _buildPermissionItem(
+                Icons.bluetooth,
+                'Bluetooth',
+                'To scan and connect to devices',
+              ),
+              _buildPermissionItem(
+                Icons.location_on,
+                'Location',
+                'Required for Bluetooth scanning',
+              ),
+              _buildPermissionItem(
+                Icons.storage,
+                'Storage',
+                'To save and access files',
+              ),
+              SizedBox(height: 12),
+              Text(
+                'Please grant these permissions in the next dialogs or go to Settings > Apps > MSP > Permissions',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                openAppSettings();
+              },
+              child: Text('Open Settings'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _requestAllPermissions();
+              },
+              child: Text('Grant Permissions'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildPermissionItem(IconData icon, String title, String description) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: Colors.blue),
+          SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                Text(
+                  description,
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _connectToDevice(ScanResult scanResult) async {
+    try {
+      // Stop scanning before connecting
+      await FlutterBluePlus.stopScan();
+
+      // Connect to device
+      await scanResult.device.connect();
+
+      // Update connected devices list
+      await _getConnectedDevices();
+
+      // Remove from available devices
+      setState(() {
+        availableDevices.removeWhere(
+          (device) => device.device.remoteId == scanResult.device.remoteId,
+        );
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Connected to ${scanResult.device.platformName.isNotEmpty ? scanResult.device.platformName : 'Unknown Device'}',
+          ),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to connect: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _disconnectDevice(BluetoothDevice device) async {
+    try {
+      await device.disconnect();
+      await _getConnectedDevices();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Disconnected from ${device.platformName.isNotEmpty ? device.platformName : 'Unknown Device'}',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to disconnect: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
@@ -136,6 +510,7 @@ class _DashboardPageState extends State<DashboardPage> {
     ];
 
     return Scaffold(
+      key: _scaffoldKey,
       appBar: AppBar(
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -165,7 +540,7 @@ class _DashboardPageState extends State<DashboardPage> {
           IconButton(
             icon: const Icon(Icons.bluetooth_searching_sharp),
             onPressed: () {
-              Scaffold.of(context).openEndDrawer();
+              _scaffoldKey.currentState?.openEndDrawer();
             },
           ),
         ],
@@ -202,23 +577,23 @@ class _DashboardPageState extends State<DashboardPage> {
                   children: [
                     // Mobile layout - single column with dynamic heights
                     buildMetricsSection(metrics),
-                    SizedBox(height: screenSize.width < 350 ? 6 : 8),
+                    SizedBox(height: screenSize.width < 350 ? 4 : 6),
                     SizedBox(
                       height: screenSize.width < 350 ? 140 : 240,
                       child: buildSection2(),
                     ),
-                    SizedBox(height: screenSize.width < 350 ? 6 : 8),
+                    SizedBox(height: screenSize.width < 350 ? 4 : 6),
                     SizedBox(
-                      height: screenSize.width < 350 ? 280 : 320,
+                      height: screenSize.width < 350 ? 240 : 280,
                       child: buildSection3(),
                     ),
-                    SizedBox(height: screenSize.width < 350 ? 6 : 8),
+                    SizedBox(height: screenSize.width < 350 ? 4 : 6),
                     SizedBox(
-                      height: screenSize.width < 350 ? 280 : 320,
+                      height: screenSize.width < 350 ? 240 : 280,
                       child: buildSection4(),
                     ),
                     SizedBox(
-                      height: screenSize.width < 350 ? 12 : 16,
+                      height: screenSize.width < 350 ? 8 : 12,
                     ), // Bottom padding
                   ],
                 ),
@@ -284,7 +659,7 @@ class _DashboardPageState extends State<DashboardPage> {
       cardPadding = const EdgeInsets.all(16.0);
     }
 
-    // Calculate grid height for mobile layout
+    // Calculate grid height for mobile layout - more conservative calculation
     final rows = (metrics.length / crossAxisCount).ceil();
     final itemWidth =
         (screenWidth -
@@ -292,14 +667,14 @@ class _DashboardPageState extends State<DashboardPage> {
             ((crossAxisCount - 1) * (isMobile ? 8 : 12))) /
         crossAxisCount;
     final itemHeight = itemWidth / childAspectRatio;
-    final gridHeight =
-        (itemHeight * rows) +
-        ((rows - 1) * (isMobile ? 8 : 12)) +
-        40; // 40 for padding
+    final gridHeight = screenWidth < 350
+        ? (itemHeight * rows) +
+              ((rows - 1) * 6) +
+              30 // Reduced for very small screens
+        : (itemHeight * rows) + ((rows - 1) * (isMobile ? 8 : 12)) + 40;
 
     return Container(
       margin: EdgeInsets.all(isMobile ? 4.0 : 8.0),
-      height: isMobile ? gridHeight : null, // Set height only for mobile
       child: Card(
         elevation: 4,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -309,90 +684,88 @@ class _DashboardPageState extends State<DashboardPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const SizedBox(height: 8),
-              Expanded(
-                child: GridView.count(
-                  crossAxisCount: crossAxisCount,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  mainAxisSpacing: isMobile ? 8 : 12,
-                  crossAxisSpacing: isMobile ? 8 : 12,
-                  childAspectRatio: childAspectRatio,
-                  children: metrics.map((metric) {
-                    return Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            Colors.blue.shade50,
-                            Colors.blue.shade100,
-                            Colors.blueAccent.withValues(alpha: 0.15),
-                          ],
-                          stops: const [0.0, 0.5, 1.0],
+              GridView.count(
+                crossAxisCount: crossAxisCount,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                mainAxisSpacing: isMobile ? 6 : 8,
+                crossAxisSpacing: isMobile ? 6 : 8,
+                childAspectRatio: childAspectRatio,
+                children: metrics.map((metric) {
+                  return Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          Colors.blue.shade50,
+                          Colors.blue.shade100,
+                          Colors.blueAccent.withValues(alpha: 0.15),
+                        ],
+                        stops: const [0.0, 0.5, 1.0],
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Colors.blueAccent.withValues(alpha: 0.4),
+                        width: 1.5,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.blueAccent.withValues(alpha: 0.2),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
+                          spreadRadius: 1,
                         ),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Colors.blueAccent.withValues(alpha: 0.4),
-                          width: 1.5,
+                        BoxShadow(
+                          color: Colors.white.withValues(alpha: 0.8),
+                          blurRadius: 2,
+                          offset: const Offset(0, -1),
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.blueAccent.withValues(alpha: 0.2),
-                            blurRadius: 8,
-                            offset: const Offset(0, 3),
-                            spreadRadius: 1,
+                      ],
+                    ),
+                    child: Padding(
+                      padding: EdgeInsets.all(isMobile ? 6.0 : 8.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            metric['icon'],
+                            size: iconSize,
+                            color: Colors.blueAccent,
                           ),
-                          BoxShadow(
-                            color: Colors.white.withValues(alpha: 0.8),
-                            blurRadius: 2,
-                            offset: const Offset(0, -1),
+                          SizedBox(height: isMobile ? 4 : 6),
+                          Flexible(
+                            child: Text(
+                              metric['name'],
+                              style: TextStyle(
+                                fontSize: titleFontSize,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey[800],
+                              ),
+                              textAlign: TextAlign.center,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          SizedBox(height: isMobile ? 2 : 4),
+                          Flexible(
+                            child: Text(
+                              metric['value'] ?? 'N/A',
+                              style: TextStyle(
+                                fontSize: valueFontSize,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.blueAccent[700],
+                              ),
+                              textAlign: TextAlign.center,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                         ],
                       ),
-                      child: Padding(
-                        padding: EdgeInsets.all(isMobile ? 6.0 : 8.0),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              metric['icon'],
-                              size: iconSize,
-                              color: Colors.blueAccent,
-                            ),
-                            SizedBox(height: isMobile ? 4 : 6),
-                            Flexible(
-                              child: Text(
-                                metric['name'],
-                                style: TextStyle(
-                                  fontSize: titleFontSize,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.grey[800],
-                                ),
-                                textAlign: TextAlign.center,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            SizedBox(height: isMobile ? 2 : 4),
-                            Flexible(
-                              child: Text(
-                                metric['value'] ?? 'N/A',
-                                style: TextStyle(
-                                  fontSize: valueFontSize,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.blueAccent[700],
-                                ),
-                                textAlign: TextAlign.center,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
+                    ),
+                  );
+                }).toList(),
               ),
             ],
           ),
@@ -1172,7 +1545,6 @@ class _DashboardPageState extends State<DashboardPage> {
           children: [
             // Header
             Container(
-              height: 120,
               width: double.infinity,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -1183,29 +1555,31 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
               child: SafeArea(
                 child: Padding(
-                  padding: const EdgeInsets.all(16.0),
+                  padding: const EdgeInsets.all(12.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.end,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.bluetooth, color: Colors.white, size: 28),
-                          SizedBox(width: 12),
-                          Text(
-                            'Bluetooth Devices',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
+                          Icon(Icons.bluetooth, color: Colors.white, size: 24),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Bluetooth Devices',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                         ],
                       ),
-                      SizedBox(height: 8),
+                      SizedBox(height: 4),
                       Text(
                         'Manage connected sensors',
-                        style: TextStyle(color: Colors.white70, fontSize: 14),
+                        style: TextStyle(color: Colors.white70, fontSize: 12),
                       ),
                     ],
                   ),
@@ -1213,34 +1587,33 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
             ),
 
-            // Content
+            // Content - Made scrollable
             Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(12.0), // Reduced padding
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min, // Added to prevent overflow
                   children: [
                     // Scan button
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
-                        onPressed: () {
-                          // Bluetooth scan functionality
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Scanning for devices...'),
-                              backgroundColor: Colors.blue,
-                            ),
-                          );
-                        },
-                        icon: Icon(Icons.search, color: Colors.white),
+                        onPressed: isScanning ? null : _scanForDevices,
+                        icon: Icon(
+                          Icons.search,
+                          color: Colors.white,
+                          size: 18,
+                        ), // Reduced icon size
                         label: Text(
-                          'Scan for Devices',
-                          style: TextStyle(color: Colors.white),
+                          isScanning ? 'Scanning...' : 'Scan for Devices',
+                          style: TextStyle(color: Colors.white, fontSize: 14),
                         ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.blue.shade600,
-                          padding: EdgeInsets.symmetric(vertical: 12),
+                          padding: EdgeInsets.symmetric(
+                            vertical: 10,
+                          ), // Reduced padding
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
@@ -1248,55 +1621,42 @@ class _DashboardPageState extends State<DashboardPage> {
                       ),
                     ),
 
-                    SizedBox(height: 24),
-
+                    SizedBox(height: 16), // Reduced spacing
                     // Connected devices section
                     Text(
                       'Connected Devices',
                       style: TextStyle(
-                        fontSize: 18,
+                        fontSize: 16, // Reduced font size
                         fontWeight: FontWeight.bold,
                         color: Colors.grey.shade800,
                       ),
                     ),
 
-                    SizedBox(height: 16),
+                    SizedBox(height: 12),
+                    // Connected devices list
+                    ...connectedDevices
+                        .map((device) => _buildConnectedDeviceItem(device))
+                        .toList(),
 
-                    // Device list
-                    Expanded(
-                      child: ListView(
-                        children: [
-                          _buildDeviceItem(
-                            'Sensor Hub 01',
-                            'Connected',
-                            Icons.sensors,
-                            Colors.green,
-                            true,
-                          ),
-                          _buildDeviceItem(
-                            'Temperature Probe',
-                            'Connected',
-                            Icons.thermostat,
-                            Colors.green,
-                            true,
-                          ),
-                          _buildDeviceItem(
-                            'Vibration Monitor',
-                            'Disconnected',
-                            Icons.vibration,
-                            Colors.red,
-                            false,
-                          ),
-                          _buildDeviceItem(
-                            'Air Quality Sensor',
-                            'Connected',
-                            Icons.air,
-                            Colors.green,
-                            true,
-                          ),
-                        ],
+                    // Available devices section
+                    if (availableDevices.isNotEmpty) ...[
+                      SizedBox(height: 24),
+                      Text(
+                        'Available Devices',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey.shade800,
+                        ),
                       ),
-                    ),
+                      SizedBox(height: 12),
+                      ...availableDevices
+                          .map(
+                            (scanResult) =>
+                                _buildAvailableDeviceItem(scanResult),
+                          )
+                          .toList(),
+                    ],
                   ],
                 ),
               ),
@@ -1315,41 +1675,60 @@ class _DashboardPageState extends State<DashboardPage> {
     bool isConnected,
   ) {
     return Card(
-      margin: EdgeInsets.only(bottom: 8),
+      margin: EdgeInsets.only(bottom: 6), // Reduced margin
       elevation: 2,
       child: ListTile(
+        dense: true, // Make ListTile more compact
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 4,
+        ), // Reduced padding
         leading: CircleAvatar(
+          radius: 18, // Smaller avatar
           backgroundColor: statusColor.withValues(alpha: 0.1),
-          child: Icon(icon, color: statusColor),
+          child: Icon(icon, color: statusColor, size: 18), // Smaller icon
         ),
         title: Text(
           name,
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+          ), // Reduced font size
+          overflow: TextOverflow.ellipsis, // Handle long text
         ),
         subtitle: Row(
           children: [
             Container(
-              width: 8,
-              height: 8,
+              width: 6, // Smaller dot
+              height: 6,
               decoration: BoxDecoration(
                 color: statusColor,
                 shape: BoxShape.circle,
               ),
             ),
-            SizedBox(width: 8),
-            Text(
-              status,
-              style: TextStyle(
-                color: statusColor,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
+            SizedBox(width: 6), // Reduced spacing
+            Expanded(
+              // Added Expanded to prevent overflow
+              child: Text(
+                status,
+                style: TextStyle(
+                  color: statusColor,
+                  fontSize: 11, // Reduced font size
+                  fontWeight: FontWeight.w600,
+                ),
+                overflow: TextOverflow.ellipsis, // Handle long text
               ),
             ),
           ],
         ),
         trailing: isConnected
             ? IconButton(
-                icon: Icon(Icons.settings, size: 20),
+                icon: Icon(Icons.settings, size: 18), // Smaller icon
+                padding: EdgeInsets.all(4), // Reduced padding
+                constraints: BoxConstraints(
+                  minWidth: 32,
+                  minHeight: 32,
+                ), // Smaller button
                 onPressed: () {
                   // Device settings
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -1358,7 +1737,12 @@ class _DashboardPageState extends State<DashboardPage> {
                 },
               )
             : IconButton(
-                icon: Icon(Icons.refresh, size: 20),
+                icon: Icon(Icons.refresh, size: 18), // Smaller icon
+                padding: EdgeInsets.all(4), // Reduced padding
+                constraints: BoxConstraints(
+                  minWidth: 32,
+                  minHeight: 32,
+                ), // Smaller button
                 onPressed: () {
                   // Reconnect device
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -1366,6 +1750,124 @@ class _DashboardPageState extends State<DashboardPage> {
                   );
                 },
               ),
+      ),
+    );
+  }
+
+  Widget _buildConnectedDeviceItem(BluetoothDevice device) {
+    final deviceName = device.platformName.isNotEmpty
+        ? device.platformName
+        : 'Unknown Device';
+
+    return Card(
+      margin: EdgeInsets.only(bottom: 6),
+      elevation: 2,
+      child: ListTile(
+        dense: true,
+        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        leading: CircleAvatar(
+          radius: 18,
+          backgroundColor: Colors.green.withValues(alpha: 0.1),
+          child: Icon(Icons.bluetooth_connected, color: Colors.green, size: 18),
+        ),
+        title: Text(
+          deviceName,
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Row(
+          children: [
+            Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: Colors.green,
+                shape: BoxShape.circle,
+              ),
+            ),
+            SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'Connected • ${device.remoteId}',
+                style: TextStyle(
+                  color: Colors.green,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        trailing: IconButton(
+          icon: Icon(Icons.settings, size: 18),
+          padding: EdgeInsets.all(4),
+          constraints: BoxConstraints(minWidth: 32, minHeight: 32),
+          onPressed: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Opening $deviceName settings...')),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAvailableDeviceItem(ScanResult scanResult) {
+    final device = scanResult.device;
+    final deviceName = device.platformName.isNotEmpty
+        ? device.platformName
+        : 'Unknown Device';
+    final rssi = scanResult.rssi;
+
+    return Card(
+      margin: EdgeInsets.only(bottom: 6),
+      elevation: 2,
+      child: ListTile(
+        dense: true,
+        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        leading: CircleAvatar(
+          radius: 18,
+          backgroundColor: Colors.blue.withValues(alpha: 0.1),
+          child: Icon(Icons.bluetooth, color: Colors.blue, size: 18),
+        ),
+        title: Text(
+          deviceName,
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Row(
+          children: [
+            Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: Colors.blue,
+                shape: BoxShape.circle,
+              ),
+            ),
+            SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'Available • Signal: ${rssi} dBm',
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        trailing: ElevatedButton(
+          onPressed: () => _connectToDevice(scanResult),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.blue.shade600,
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            minimumSize: Size(60, 28),
+          ),
+          child: Text(
+            'Connect',
+            style: TextStyle(color: Colors.white, fontSize: 11),
+          ),
+        ),
       ),
     );
   }
