@@ -35,10 +35,10 @@ class _MainNavigationState extends State<MainNavigation> {
             Container(
               width: 80,
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: const Color(0xFF1E1E1E),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.1),
+                    color: Colors.black.withValues(alpha: 0.3),
                     blurRadius: 10,
                     offset: const Offset(2, 0),
                   ),
@@ -88,55 +88,85 @@ class _MainNavigationState extends State<MainNavigation> {
       return Scaffold(
         body: IndexedStack(index: _currentIndex, children: _pages),
         floatingActionButton: Container(
-          margin: const EdgeInsets.only(top: 10),
-          height: 56,
-          width: 56,
+          height: 64,
+          width: 64,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: const LinearGradient(
+              colors: [Color(0xFF2196F3), Color(0xFF1976D2)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.blue.withValues(alpha: 0.3),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
           child: FloatingActionButton(
-            backgroundColor: Colors.blue,
-            elevation: 4,
+            backgroundColor: Colors.transparent,
+            elevation: 0,
             onPressed: () {
               Navigator.pushNamed(context, '/qrpage');
             },
-            shape: RoundedRectangleBorder(
-              side: const BorderSide(width: 3, color: Colors.white),
-              borderRadius: BorderRadius.circular(100),
-            ),
             child: const Icon(
               Icons.qr_code_scanner,
               color: Colors.white,
-              size: 24,
+              size: 28,
             ),
           ),
         ),
         floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-        bottomNavigationBar: SafeArea(
-          child: Container(
-            height: 65,
+        bottomNavigationBar: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E1E1E),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.3),
+                blurRadius: 20,
+                offset: const Offset(0, -8),
+              ),
+            ],
+          ),
+          child: SafeArea(
             child: BottomAppBar(
-              elevation: 8,
+              elevation: 0,
+              height: 75,
               shape: const CircularNotchedRectangle(),
-              color: Colors.white,
-              notchMargin: 8,
-              child: Container(
-                height: 65,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.1),
-                      blurRadius: 10,
-                      offset: const Offset(0, -5),
-                    ),
-                  ],
-                ),
+              color: const Color(0xFF1E1E1E),
+              notchMargin: 10,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _buildNavItem(0, Icons.dashboard, 'Dashboard'),
-                    _buildNavItem(1, Icons.assessment, 'Reports'),
-                    const SizedBox(width: 40), // Space for FAB
-                    _buildNavItem(2, Icons.analytics, 'Analytics'),
-                    _buildNavItem(3, Icons.settings, 'Settings'),
+                    _buildNavItem(
+                      0,
+                      Icons.dashboard_outlined,
+                      Icons.dashboard,
+                      'Dashboard',
+                    ),
+                    _buildNavItem(
+                      1,
+                      Icons.assessment_outlined,
+                      Icons.assessment,
+                      'Reports',
+                    ),
+                    const SizedBox(width: 48), // Space for FAB
+                    _buildNavItem(
+                      2,
+                      Icons.analytics_outlined,
+                      Icons.analytics,
+                      'Analytics',
+                    ),
+                    _buildNavItem(
+                      3,
+                      Icons.settings_outlined,
+                      Icons.settings,
+                      'Settings',
+                    ),
                   ],
                 ),
               ),
@@ -147,39 +177,83 @@ class _MainNavigationState extends State<MainNavigation> {
     }
   }
 
-  Widget _buildNavItem(int index, IconData icon, String label) {
+  Widget _buildNavItem(
+    int index,
+    IconData outlinedIcon,
+    IconData filledIcon,
+    String label,
+  ) {
     final isSelected = _currentIndex == index;
 
     return Expanded(
-      child: GestureDetector(
-        onTap: () {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
-        child: Container(
-          height: 65,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                color: isSelected ? Colors.blue : Colors.grey,
-                size: isSelected ? 26 : 22,
-              ),
-              const SizedBox(height: 2),
-              Text(
-                label,
-                style: TextStyle(
-                  color: isSelected ? Colors.blue : Colors.grey,
-                  fontSize: 10,
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            setState(() {
+              _currentIndex = index;
+            });
+          },
+          borderRadius: BorderRadius.circular(16),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // If height is very constrained (< 35px), show icon only
+              final showTextLabel = constraints.maxHeight >= 35;
+
+              return Container(
+                height: constraints.maxHeight,
+                padding: const EdgeInsets.symmetric(vertical: 1, horizontal: 2),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: EdgeInsets.all(isSelected ? 3 : 2),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? Colors.blue.withValues(alpha: 0.12)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Icon(
+                          isSelected ? filledIcon : outlinedIcon,
+                          color: isSelected
+                              ? const Color(0xFF1976D2)
+                              : Colors.grey,
+                          size: showTextLabel ? 18 : 20,
+                        ),
+                      ),
+                    ),
+                    if (showTextLabel) ...[
+                      const SizedBox(height: 1),
+                      Flexible(
+                        child: AnimatedDefaultTextStyle(
+                          duration: const Duration(milliseconds: 200),
+                          style: TextStyle(
+                            color: isSelected
+                                ? const Color(0xFF1976D2)
+                                : Colors.grey,
+                            fontSize: 8,
+                            fontWeight: isSelected
+                                ? FontWeight.w600
+                                : FontWeight.w500,
+                            letterSpacing: 0.1,
+                          ),
+                          child: Text(
+                            label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+              );
+            },
           ),
         ),
       ),
@@ -197,7 +271,7 @@ class _MainNavigationState extends State<MainNavigation> {
       },
       child: Container(
         width: 80,
-        height: 70,
+        constraints: const BoxConstraints(minHeight: 60, maxHeight: 70),
         margin: const EdgeInsets.symmetric(vertical: 4),
         decoration: BoxDecoration(
           color: isSelected
@@ -207,23 +281,26 @@ class _MainNavigationState extends State<MainNavigation> {
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               icon,
               color: isSelected ? Colors.blue : Colors.grey,
-              size: isSelected ? 28 : 24,
+              size: isSelected ? 26 : 22,
             ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                color: isSelected ? Colors.blue : Colors.grey,
-                fontSize: 9,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+            const SizedBox(height: 2),
+            Flexible(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: isSelected ? Colors.blue : Colors.grey,
+                  fontSize: 8,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),

@@ -25,15 +25,17 @@ class _QrPageState extends State<QrPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('QR Scanner'),
+        backgroundColor: const Color(0xFF1E1E1E),
+        foregroundColor: Colors.white,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () {
             Navigator.pop(context);
           },
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.flash_on),
+            icon: const Icon(Icons.flash_on, color: Colors.white),
             onPressed: () async {
               await controller?.toggleFlash();
             },
@@ -60,6 +62,7 @@ class _QrPageState extends State<QrPage> {
             flex: 1,
             child: Container(
               padding: const EdgeInsets.all(12),
+              color: const Color(0xFF121212),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
@@ -74,13 +77,17 @@ class _QrPageState extends State<QrPage> {
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
+                              color: Colors.white,
                             ),
                           ),
                           const SizedBox(height: 6),
                           Flexible(
                             child: Text(
                               result!,
-                              style: const TextStyle(fontSize: 14),
+                              style: const TextStyle(
+                                fontSize: 14,
+                                color: Colors.white,
+                              ),
                               textAlign: TextAlign.center,
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
@@ -94,6 +101,10 @@ class _QrPageState extends State<QrPage> {
                               });
                               controller?.resumeCamera();
                             },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                            ),
                             child: const Text('Scan Again'),
                           ),
                         ],

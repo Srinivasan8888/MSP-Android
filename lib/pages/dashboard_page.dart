@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:async';
 import '../services/api_service.dart';
+import '../services/notification_service.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -20,6 +21,10 @@ class _DashboardPageState extends State<DashboardPage> {
   bool isLoading = true;
   bool isChartLoading = false;
   String selectedParameter = 'vibration';
+
+  // Notification state
+  List<NotificationItem> notifications = [];
+  int unreadNotificationCount = 0;
 
   // Bluetooth scanning state
   bool isScanning = false;
@@ -38,6 +43,7 @@ class _DashboardPageState extends State<DashboardPage> {
     'pressure',
     'altitude',
     'airquality',
+    'battery',
   ];
 
   @override
@@ -45,6 +51,7 @@ class _DashboardPageState extends State<DashboardPage> {
     super.initState();
     _loadDashboardData();
     _loadChartData();
+    _loadNotifications();
     _requestInitialPermissions();
     _initBluetooth();
   }
@@ -124,6 +131,9 @@ class _DashboardPageState extends State<DashboardPage> {
       chartData = data; // Same data contains both dashboard and chart info
       isLoading = false;
     });
+
+    // Check for sensor alerts after loading data
+    await _checkSensorAlerts();
   }
 
   Future<void> _loadChartData() async {
@@ -141,6 +151,26 @@ class _DashboardPageState extends State<DashboardPage> {
       chartData = data;
       isChartLoading = false;
     });
+  }
+
+  Future<void> _loadNotifications() async {
+    final allNotifications = await NotificationService.getAllNotifications();
+    final unreadCount = await NotificationService.getUnreadCount();
+
+    setState(() {
+      notifications = allNotifications;
+      unreadNotificationCount = unreadCount;
+    });
+  }
+
+  Future<void> _checkSensorAlerts() async {
+    if (dashboardData != null) {
+      // Check current sensor values against thresholds
+      await NotificationService.checkSensorValues(dashboardData!);
+
+      // Reload notifications to get any new alerts
+      await _loadNotifications();
+    }
   }
 
   String _getLatestValue(String key, String unit) {
@@ -451,6 +481,264 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
+  void _showNotificationPanel() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.7,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade900,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            // Header
+            Container(
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade800,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Sensor Alerts',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      if (notifications.isNotEmpty)
+                        TextButton(
+                          onPressed: () async {
+                            await NotificationService.clearAllNotifications();
+                            await _loadNotifications();
+                            Navigator.pop(context);
+                          },
+                          child: Text(
+                            'Clear All',
+                            style: TextStyle(color: Colors.red.shade300),
+                          ),
+                        ),
+                      if (unreadNotificationCount > 0)
+                        TextButton(
+                          onPressed: () async {
+                            await NotificationService.markAllAsRead();
+                            await _loadNotifications();
+                            Navigator.pop(context);
+                          },
+                          child: Text(
+                            'Mark All Read',
+                            style: TextStyle(color: Colors.blue.shade300),
+                          ),
+                        ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: Icon(Icons.close, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            // Notifications list
+            Expanded(
+              child: notifications.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.notifications_none,
+                            size: 64,
+                            color: Colors.grey.shade400,
+                          ),
+                          SizedBox(height: 16),
+                          Text(
+                            'No alerts yet',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.grey.shade400,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: EdgeInsets.all(16),
+                      itemCount: notifications.length,
+                      itemBuilder: (context, index) {
+                        final notification = notifications[index];
+                        return _buildNotificationItem(notification);
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNotificationItem(NotificationItem notification) {
+    final sensorName = _getSensorDisplayName(notification.sensorType);
+    final alertColor = _getAlertColor(notification.alertLevel);
+    final timeAgo = _getTimeAgo(notification.timestamp);
+
+    return Card(
+      margin: EdgeInsets.only(bottom: 8),
+      color: notification.isRead ? Colors.grey.shade800 : Colors.grey.shade700,
+      child: ListTile(
+        leading: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: alertColor.withOpacity(0.3),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Icon(
+            _getSensorIcon(notification.sensorType),
+            color: alertColor,
+            size: 20,
+          ),
+        ),
+        title: Text(
+          '$sensorName Alert',
+          style: TextStyle(
+            fontWeight: notification.isRead
+                ? FontWeight.normal
+                : FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Value: ${notification.value.toStringAsFixed(1)} ${notification.unit}',
+              style: TextStyle(color: Colors.grey.shade300),
+            ),
+            Text(
+              'Threshold: ${notification.threshold.toStringAsFixed(1)} ${notification.unit}',
+              style: TextStyle(color: Colors.grey.shade300),
+            ),
+            Text(
+              timeAgo,
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+            ),
+          ],
+        ),
+        trailing: notification.isRead
+            ? null
+            : Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade400,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+        onTap: () async {
+          if (!notification.isRead) {
+            await NotificationService.markAsRead(notification.id);
+            await _loadNotifications();
+          }
+        },
+      ),
+    );
+  }
+
+  String _getSensorDisplayName(String sensorType) {
+    switch (sensorType) {
+      case 'vibration':
+        return 'Vibration';
+      case 'magneticflux':
+        return 'Magnetic Flux';
+      case 'rpm':
+        return 'RPM';
+      case 'acoustics':
+        return 'Acoustics';
+      case 'temperature':
+        return 'Temperature';
+      case 'humidity':
+        return 'Humidity';
+      case 'pressure':
+        return 'Pressure';
+      case 'altitude':
+        return 'Altitude';
+      case 'airquality':
+        return 'Air Quality';
+      case 'battery':
+        return 'Battery';
+      default:
+        return sensorType;
+    }
+  }
+
+  IconData _getSensorIcon(String sensorType) {
+    switch (sensorType) {
+      case 'vibration':
+        return Icons.vibration;
+      case 'magneticflux':
+        return Icons.explore;
+      case 'rpm':
+        return Icons.rotate_right;
+      case 'acoustics':
+        return Icons.speaker;
+      case 'temperature':
+        return Icons.thermostat;
+      case 'humidity':
+        return Icons.water_drop;
+      case 'pressure':
+        return Icons.compress;
+      case 'altitude':
+        return Icons.terrain;
+      case 'airquality':
+        return Icons.air;
+      case 'battery':
+        return Icons.battery_alert;
+      default:
+        return Icons.sensors;
+    }
+  }
+
+  Color _getAlertColor(String alertLevel) {
+    switch (alertLevel) {
+      case 'veryLow':
+        return Colors.green;
+      case 'low':
+        return Colors.lightGreen;
+      case 'medium':
+        return Colors.yellow.shade700;
+      case 'high':
+        return Colors.orange;
+      case 'veryHigh':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  String _getTimeAgo(DateTime timestamp) {
+    final now = DateTime.now();
+    final difference = now.difference(timestamp);
+
+    if (difference.inMinutes < 1) {
+      return 'Just now';
+    } else if (difference.inHours < 1) {
+      return '${difference.inMinutes}m ago';
+    } else if (difference.inDays < 1) {
+      return '${difference.inHours}h ago';
+    } else {
+      return '${difference.inDays}d ago';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final Size screenSize = MediaQuery.of(context).size;
@@ -507,20 +795,29 @@ class _DashboardPageState extends State<DashboardPage> {
         'icon': Icons.air,
         'value': _getLatestValue('airquality', 'ppm'),
       },
+      {
+        'name': 'Battery',
+        'icon': Icons.battery_full,
+        'value': _getLatestValue('battery', '%'),
+      },
     ];
 
     return Scaffold(
       key: _scaffoldKey,
+      backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
+        backgroundColor: const Color(0xFF1E1E1E),
+        foregroundColor: Colors.white,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Dashboard'),
+            const Text('Dashboard', style: TextStyle(color: Colors.white)),
             Text(
-              'User ID: ${ApiService.getScannedUserId() ?? 'N/A'}',
+              'Device ID: ${ApiService.getScannedUserId() ?? 'N/A'}',
               style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.normal,
+                color: Colors.grey,
               ),
             ),
           ],
@@ -528,7 +825,7 @@ class _DashboardPageState extends State<DashboardPage> {
         automaticallyImplyLeading: false,
         actions: [
           IconButton(
-            icon: Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh, color: Colors.white),
             onPressed: () {
               setState(() {
                 isLoading = true;
@@ -537,8 +834,46 @@ class _DashboardPageState extends State<DashboardPage> {
               _loadChartData();
             },
           ),
+          Stack(
+            children: [
+              IconButton(
+                icon: const Icon(
+                  Icons.notifications_active,
+                  color: Colors.white,
+                ),
+                onPressed: () {
+                  _showNotificationPanel();
+                },
+              ),
+              if (unreadNotificationCount > 0)
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: Container(
+                    padding: EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    constraints: BoxConstraints(minWidth: 16, minHeight: 16),
+                    child: Text(
+                      '$unreadNotificationCount',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
+          ),
           IconButton(
-            icon: const Icon(Icons.bluetooth_searching_sharp),
+            icon: const Icon(
+              Icons.bluetooth_searching_sharp,
+              color: Colors.white,
+            ),
             onPressed: () {
               _scaffoldKey.currentState?.openEndDrawer();
             },
@@ -609,57 +944,57 @@ class _DashboardPageState extends State<DashboardPage> {
     final double screenWidth = MediaQuery.of(context).size.width;
     bool isMobile = screenWidth < 600;
 
-    // Dynamic grid configuration based on screen size - INCREASED FONT SIZES
+    // Dynamic grid configuration - much smaller cards for mobile
     int crossAxisCount = 2;
-    double childAspectRatio = 1.1;
-    double iconSize = 24;
-    double titleFontSize = 14;
-    double valueFontSize = 16;
+    double childAspectRatio = 1.5;
+    double iconSize = 32;
+    double titleFontSize = 16;
+    double valueFontSize = 20;
     EdgeInsets cardPadding = const EdgeInsets.all(8.0);
 
     if (screenWidth < 350) {
-      // Very small mobile phones - INCREASED SIZES
-      crossAxisCount = 2;
-      childAspectRatio = 1.0;
+      // Very small mobile phones - very small cards
+      crossAxisCount = 3;
+      childAspectRatio = 2.5;
+      iconSize = 20;
+      titleFontSize = 10;
+      valueFontSize = 14;
+      cardPadding = const EdgeInsets.all(2.0);
+    } else if (screenWidth < 400) {
+      // Small mobile phones - small cards
+      crossAxisCount = 3;
+      childAspectRatio = 2.2;
       iconSize = 22;
       titleFontSize = 12;
-      valueFontSize = 14;
-      cardPadding = const EdgeInsets.all(6.0);
-    } else if (screenWidth < 400) {
-      // Small mobile phones - INCREASED SIZES
+      valueFontSize = 16;
+      cardPadding = const EdgeInsets.all(4.0);
+    } else if (screenWidth < 600) {
+      // Regular mobile phones - compact cards
       crossAxisCount = 2;
-      childAspectRatio = 1.1;
+      childAspectRatio = 1.8;
       iconSize = 26;
       titleFontSize = 14;
-      valueFontSize = 16;
-      cardPadding = const EdgeInsets.all(8.0);
-    } else if (screenWidth < 600) {
-      // Regular mobile phones - INCREASED SIZES
-      crossAxisCount = 2;
-      childAspectRatio = 1.2;
-      iconSize = 30;
-      titleFontSize = 16;
       valueFontSize = 18;
-      cardPadding = const EdgeInsets.all(10.0);
+      cardPadding = const EdgeInsets.all(6.0);
     } else if (screenWidth < 900) {
-      // Tablets portrait - INCREASED SIZES
+      // Tablets portrait
       crossAxisCount = 3;
-      childAspectRatio = 1.3;
-      iconSize = 32;
-      titleFontSize = 16;
-      valueFontSize = 18;
+      childAspectRatio = 1.0;
+      iconSize = 40;
+      titleFontSize = 18;
+      valueFontSize = 22;
       cardPadding = const EdgeInsets.all(12.0);
     } else {
-      // Tablets landscape / Desktop - INCREASED SIZES
-      crossAxisCount = 5;
-      childAspectRatio = .9;
-      iconSize = 32;
-      titleFontSize = 16;
-      valueFontSize = 18;
+      // Tablets landscape / Desktop
+      crossAxisCount = 3;
+      childAspectRatio = 1.0;
+      iconSize = 44;
+      titleFontSize = 20;
+      valueFontSize = 24;
       cardPadding = const EdgeInsets.all(16.0);
     }
 
-    // Calculate grid height for mobile layout - more conservative calculation
+    // Calculate grid height for mobile layout
     final rows = (metrics.length / crossAxisCount).ceil();
     final itemWidth =
         (screenWidth -
@@ -667,16 +1002,14 @@ class _DashboardPageState extends State<DashboardPage> {
             ((crossAxisCount - 1) * (isMobile ? 8 : 12))) /
         crossAxisCount;
     final itemHeight = itemWidth / childAspectRatio;
-    final gridHeight = screenWidth < 350
-        ? (itemHeight * rows) +
-              ((rows - 1) * 6) +
-              30 // Reduced for very small screens
-        : (itemHeight * rows) + ((rows - 1) * (isMobile ? 8 : 12)) + 40;
+    final gridHeight =
+        (itemHeight * rows) + ((rows - 1) * (isMobile ? 4 : 12)) + 40;
 
     return Container(
       margin: EdgeInsets.all(isMobile ? 4.0 : 8.0),
       child: Card(
         elevation: 4,
+        color: const Color(0xFF1E1E1E),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Padding(
           padding: cardPadding,
@@ -698,33 +1031,27 @@ class _DashboardPageState extends State<DashboardPage> {
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                         colors: [
-                          Colors.blue.shade50,
-                          Colors.blue.shade100,
-                          Colors.blueAccent.withValues(alpha: 0.15),
+                          const Color(0x33262626), // 20% opacity
+                          const Color(0x33ababab),
+                          const Color(0x33272727),
                         ],
-                        stops: const [0.0, 0.5, 1.0],
                       ),
+
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: Colors.blueAccent.withValues(alpha: 0.4),
-                        width: 1.5,
+                        color: const Color(0xFFFFFFFF),
+                        width: 1.0,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.blueAccent.withValues(alpha: 0.2),
-                          blurRadius: 8,
-                          offset: const Offset(0, 3),
-                          spreadRadius: 1,
-                        ),
-                        BoxShadow(
-                          color: Colors.white.withValues(alpha: 0.8),
-                          blurRadius: 2,
-                          offset: const Offset(0, -1),
+                          color: Colors.black.withValues(alpha: 0.2),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
                         ),
                       ],
                     ),
                     child: Padding(
-                      padding: EdgeInsets.all(isMobile ? 6.0 : 8.0),
+                      padding: EdgeInsets.all(isMobile ? 4.0 : 12.0),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -733,33 +1060,29 @@ class _DashboardPageState extends State<DashboardPage> {
                             size: iconSize,
                             color: Colors.blueAccent,
                           ),
-                          SizedBox(height: isMobile ? 4 : 6),
-                          Flexible(
-                            child: Text(
-                              metric['name'],
-                              style: TextStyle(
-                                fontSize: titleFontSize,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.grey[800],
-                              ),
-                              textAlign: TextAlign.center,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
+                          SizedBox(height: isMobile ? 2 : 8),
+                          Text(
+                            metric['name'],
+                            style: TextStyle(
+                              fontSize: titleFontSize,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
                             ),
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          SizedBox(height: isMobile ? 2 : 4),
-                          Flexible(
-                            child: Text(
-                              metric['value'] ?? 'N/A',
-                              style: TextStyle(
-                                fontSize: valueFontSize,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.blueAccent[700],
-                              ),
-                              textAlign: TextAlign.center,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                          SizedBox(height: isMobile ? 1 : 6),
+                          Text(
+                            metric['value'] ?? 'N/A',
+                            style: TextStyle(
+                              fontSize: valueFontSize,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.blueAccent[300],
                             ),
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ),
@@ -784,7 +1107,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
       child: Card(
         elevation: 4,
-        color: Colors.white,
+        color: const Color(0xFF1E1E1E),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Padding(
           padding: EdgeInsets.all(isMobile ? 8.0 : 12.0),
@@ -879,9 +1202,9 @@ class _DashboardPageState extends State<DashboardPage> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Colors.blue.shade50,
-            Colors.blue.shade100,
-            Colors.blueAccent.withValues(alpha: 0.15),
+            const Color(0xFF2A2A2A),
+            const Color(0xFF3A3A3A),
+            Colors.blueAccent.withValues(alpha: 0.3),
           ],
           stops: const [0.0, 0.5, 1.0],
         ),
@@ -927,7 +1250,7 @@ class _DashboardPageState extends State<DashboardPage> {
               child: Text(
                 boxData['title'] ?? title,
                 style: TextStyle(
-                  color: Colors.blueGrey.shade800,
+                  color: Colors.white,
                   fontSize: titleFontSize,
                   fontWeight: FontWeight.bold,
                 ),
@@ -942,7 +1265,7 @@ class _DashboardPageState extends State<DashboardPage> {
               child: Text(
                 boxData['value'] ?? 'N/A',
                 style: TextStyle(
-                  color: Colors.blueGrey.shade900,
+                  color: Colors.white,
                   fontSize: valueFontSize,
                   fontWeight: FontWeight.bold,
                 ),
@@ -971,7 +1294,7 @@ class _DashboardPageState extends State<DashboardPage> {
                   child: Text(
                     boxData['subtitle'],
                     style: TextStyle(
-                      color: statusColor.withValues(alpha: 0.9),
+                      color: Colors.white,
                       fontSize: subtitleFontSize,
                       fontWeight: FontWeight.w600,
                     ),
@@ -1003,9 +1326,11 @@ class _DashboardPageState extends State<DashboardPage> {
             return Colors.red; // High temperature
           } else if (tempValue < 10) {
             return Colors.blue; // Low temperature
+          } else {
+            return Colors.green; // Normal temperature
           }
         }
-        return Colors.green; // Normal temperature
+        return Colors.grey; // No data
 
       case 'Box 2':
         // RPM color coding
@@ -1016,9 +1341,11 @@ class _DashboardPageState extends State<DashboardPage> {
             return Colors.orange; // High RPM
           } else if (rpmValue < 500) {
             return Colors.blue; // Low RPM
+          } else {
+            return Colors.green; // Normal RPM
           }
         }
-        return Colors.green; // Normal RPM
+        return Colors.grey; // No data
 
       case 'Box 3':
         // Air Quality color coding
@@ -1029,9 +1356,11 @@ class _DashboardPageState extends State<DashboardPage> {
             return Colors.red; // Poor air quality
           } else if (aqValue > 300) {
             return Colors.orange; // Moderate air quality
+          } else {
+            return Colors.green; // Good air quality
           }
         }
-        return Colors.green; // Good air quality
+        return Colors.grey; // No data
 
       case 'Box 4':
         // Engine Status color coding
@@ -1040,9 +1369,11 @@ class _DashboardPageState extends State<DashboardPage> {
           double vibValue = double.tryParse(vibration.toString()) ?? 0.0;
           if (vibValue > 10) {
             return Colors.red; // Engine failure
+          } else {
+            return Colors.green; // Engine stable
           }
         }
-        return Colors.green; // Engine stable
+        return Colors.grey; // No data
 
       default:
         return Colors.grey;
@@ -1058,38 +1389,42 @@ class _DashboardPageState extends State<DashboardPage> {
       case 'Box 1':
         // Temperature Analysis
         final temp = dashboardData!['temperature'];
-        String status = 'Normal';
+        String status = 'No Data';
         if (temp != null) {
           double tempValue = double.tryParse(temp.toString()) ?? 0.0;
           if (tempValue > 40) {
             status = 'High';
           } else if (tempValue < 10) {
             status = 'Low';
+          } else {
+            status = 'Normal';
           }
         }
         return {
           'title': 'Temperature',
           'value': '${temp ?? 'N/A'}°C',
-          'subtitle': 'N/A' ?? status,
+          'subtitle': status,
         };
 
       case 'Box 2':
         // RPM Analysis
         final rpm = dashboardData!['rpm'];
-        String status = 'Normal';
+        String status = 'No Data';
         if (rpm != null) {
           double rpmValue = double.tryParse(rpm.toString()) ?? 0.0;
           if (rpmValue > 2000) {
             status = 'High Speed';
           } else if (rpmValue < 500) {
             status = 'Low Speed';
+          } else {
+            status = 'Normal';
           }
         }
         return {'title': 'RPM', 'value': '${rpm ?? 'N/A'}', 'subtitle': status};
 
       case 'Box 3':
         final airQuality = dashboardData!['airquality'];
-        String status = 'Good';
+        String status = 'No Data';
 
         if (airQuality != null) {
           double aqValue = double.tryParse(airQuality.toString()) ?? 0.0;
@@ -1097,6 +1432,8 @@ class _DashboardPageState extends State<DashboardPage> {
             status = 'Poor';
           } else if (aqValue > 300) {
             status = 'Moderate';
+          } else {
+            status = 'Good';
           }
         }
 
@@ -1108,15 +1445,18 @@ class _DashboardPageState extends State<DashboardPage> {
 
       case 'Box 4':
         // Engine Status based on vibration
-        final vibration = dashboardData!['vibration'];
-        String status = 'Stable';
-        String statusText = 'Engine Running Stable';
+        final vibration = dashboardData?['vibration'];
+        String status = 'N/A';
+        String statusText = 'No Data';
 
         if (vibration != null) {
           double vibValue = double.tryParse(vibration.toString()) ?? 0.0;
           if (vibValue > 10) {
             status = 'FAILURE';
             statusText = 'Engine Failure';
+          } else if (vibValue >= 0) {
+            status = 'Stable';
+            statusText = 'Engine Running Stable';
           }
         }
 
@@ -1141,7 +1481,7 @@ class _DashboardPageState extends State<DashboardPage> {
       return Container(
         margin: EdgeInsets.all(isMobile ? 4.0 : 8.0),
         child: Card(
-          color: Colors.white,
+          color: const Color(0xFF1E1E1E),
           elevation: 4,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
@@ -1154,6 +1494,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 style: TextStyle(
                   fontSize: isMobile ? 14 : 16,
                   fontWeight: FontWeight.bold,
+                  color: Colors.white,
                 ),
               ),
             ),
@@ -1170,6 +1511,7 @@ class _DashboardPageState extends State<DashboardPage> {
       margin: EdgeInsets.all(isMobile ? 4.0 : 8.0),
       child: Card(
         elevation: 4,
+        color: const Color(0xFF1E1E1E),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Padding(
           padding: EdgeInsets.all(isMobile ? 6.0 : 8.0),
@@ -1183,6 +1525,7 @@ class _DashboardPageState extends State<DashboardPage> {
                   style: TextStyle(
                     fontSize: isMobile ? 18 : 22,
                     fontWeight: FontWeight.bold,
+                    color: Colors.white,
                   ),
                 ),
               ),
@@ -1200,6 +1543,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: isMobile ? 14 : 16,
+                              color: Colors.white,
                             ),
                           ),
                         );
@@ -1211,7 +1555,10 @@ class _DashboardPageState extends State<DashboardPage> {
                             return DataCell(
                               Text(
                                 dataItem[column]?.toString() ?? 'N/A',
-                                style: TextStyle(fontSize: isMobile ? 13 : 15),
+                                style: TextStyle(
+                                  fontSize: isMobile ? 13 : 15,
+                                  color: Colors.white,
+                                ),
                               ),
                             );
                           }).toList(),
@@ -1237,7 +1584,7 @@ class _DashboardPageState extends State<DashboardPage> {
       margin: EdgeInsets.all(isMobile ? 4.0 : 8.0),
       child: Card(
         elevation: 4,
-        color: Colors.white,
+        color: const Color(0xFF1E1E1E),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Padding(
           padding: EdgeInsets.all(isMobile ? 8.0 : 16.0),
@@ -1253,26 +1600,31 @@ class _DashboardPageState extends State<DashboardPage> {
                       style: TextStyle(
                         fontSize: isMobile ? 20 : 24,
                         fontWeight: FontWeight.bold,
-                        color: Colors.black87,
+                        color: Colors.white,
                       ),
                     ),
                   ),
                   Container(
                     padding: EdgeInsets.symmetric(horizontal: isMobile ? 6 : 8),
                     decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey.shade300),
+                      border: Border.all(color: Colors.grey.shade600),
                       borderRadius: BorderRadius.circular(6),
+                      color: const Color(0xFF2A2A2A),
                     ),
                     child: DropdownButton<String>(
                       value: selectedParameter,
                       underline: const SizedBox(),
                       isDense: true,
+                      dropdownColor: const Color(0xFF2A2A2A),
                       items: chartParameters.map((String parameter) {
                         return DropdownMenuItem<String>(
                           value: parameter,
                           child: Text(
                             parameter,
-                            style: TextStyle(fontSize: isMobile ? 10 : 12),
+                            style: TextStyle(
+                              fontSize: isMobile ? 10 : 12,
+                              color: Colors.white,
+                            ),
                           ),
                         );
                       }).toList(),
@@ -1291,7 +1643,9 @@ class _DashboardPageState extends State<DashboardPage> {
               SizedBox(height: isMobile ? 8 : 16),
               Expanded(
                 child: isChartLoading
-                    ? const Center(child: CircularProgressIndicator())
+                    ? const Center(
+                        child: CircularProgressIndicator(color: Colors.white),
+                      )
                     : _buildChart(),
               ),
             ],
@@ -1303,12 +1657,22 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Widget _buildChart() {
     if (chartData == null || chartData!['chartPoints'] == null) {
-      return const Center(child: Text('No chart data available'));
+      return const Center(
+        child: Text(
+          'No chart data available',
+          style: TextStyle(color: Colors.white),
+        ),
+      );
     }
 
     final List<dynamic> chartPoints = chartData!['chartPoints'];
     if (chartPoints.isEmpty) {
-      return const Center(child: Text('No data points available'));
+      return const Center(
+        child: Text(
+          'No data points available',
+          style: TextStyle(color: Colors.white),
+        ),
+      );
     }
 
     List<FlSpot> spots = [];
@@ -1326,7 +1690,12 @@ class _DashboardPageState extends State<DashboardPage> {
     }
 
     if (spots.isEmpty) {
-      return const Center(child: Text('No valid data for selected parameter'));
+      return const Center(
+        child: Text(
+          'No valid data for selected parameter',
+          style: TextStyle(color: Colors.white),
+        ),
+      );
     }
 
     // Add some padding to the Y axis range
@@ -1344,10 +1713,10 @@ class _DashboardPageState extends State<DashboardPage> {
           horizontalInterval: (maxY - minY) / 5,
           verticalInterval: spots.length > 10 ? spots.length / 5 : 1,
           getDrawingHorizontalLine: (value) {
-            return FlLine(color: Colors.grey.shade300, strokeWidth: 1);
+            return FlLine(color: Colors.grey.shade600, strokeWidth: 1);
           },
           getDrawingVerticalLine: (value) {
-            return FlLine(color: Colors.grey.shade300, strokeWidth: 1);
+            return FlLine(color: Colors.grey.shade600, strokeWidth: 1);
           },
         ),
         titlesData: FlTitlesData(
@@ -1358,7 +1727,7 @@ class _DashboardPageState extends State<DashboardPage> {
               getTitlesWidget: (value, meta) {
                 return Text(
                   value.toStringAsFixed(1),
-                  style: const TextStyle(fontSize: 10),
+                  style: const TextStyle(fontSize: 10, color: Colors.white),
                 );
               },
             ),
@@ -1372,7 +1741,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 if (index >= 0 && index < chartPoints.length) {
                   return Text(
                     '${index + 1}',
-                    style: const TextStyle(fontSize: 10),
+                    style: const TextStyle(fontSize: 10, color: Colors.white),
                   );
                 }
                 return const Text('');
@@ -1384,7 +1753,7 @@ class _DashboardPageState extends State<DashboardPage> {
         ),
         borderData: FlBorderData(
           show: true,
-          border: Border.all(color: Colors.grey.shade300),
+          border: Border.all(color: Colors.grey.shade600),
         ),
         minX: 0,
         maxX: (spots.length - 1).toDouble(),
@@ -1444,6 +1813,12 @@ class _DashboardPageState extends State<DashboardPage> {
               ? (adjustedMaxY - adjustedMinY) / 5
               : 1,
           verticalInterval: spots.length > 1 ? (spots.length - 1) / 5 : 1,
+          getDrawingHorizontalLine: (value) {
+            return FlLine(color: Colors.grey.shade600, strokeWidth: 1);
+          },
+          getDrawingVerticalLine: (value) {
+            return FlLine(color: Colors.grey.shade600, strokeWidth: 1);
+          },
         ),
         titlesData: FlTitlesData(
           leftTitles: AxisTitles(
@@ -1453,7 +1828,7 @@ class _DashboardPageState extends State<DashboardPage> {
               getTitlesWidget: (value, meta) {
                 return Text(
                   value.toStringAsFixed(1),
-                  style: const TextStyle(fontSize: 10),
+                  style: const TextStyle(fontSize: 10, color: Colors.white),
                 );
               },
             ),
@@ -1467,7 +1842,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 if (index >= 0 && index < chartPoints.length) {
                   return Text(
                     '${index + 1}',
-                    style: const TextStyle(fontSize: 10),
+                    style: const TextStyle(fontSize: 10, color: Colors.white),
                   );
                 }
                 return const Text('');
@@ -1479,7 +1854,7 @@ class _DashboardPageState extends State<DashboardPage> {
         ),
         borderData: FlBorderData(
           show: true,
-          border: Border.all(color: Colors.grey.shade300),
+          border: Border.all(color: Colors.grey.shade600),
         ),
         minX: 0,
         maxX: (spots.length - 1).toDouble(),
@@ -1538,7 +1913,7 @@ class _DashboardPageState extends State<DashboardPage> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Colors.blue.shade50, Colors.blue.shade100],
+            colors: [Colors.grey.shade900, Colors.grey.shade800],
           ),
         ),
         child: Column(
@@ -1550,7 +1925,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [Colors.blue.shade600, Colors.blue.shade800],
+                  colors: [Colors.grey.shade800, Colors.grey.shade900],
                 ),
               ),
               child: SafeArea(
@@ -1610,7 +1985,7 @@ class _DashboardPageState extends State<DashboardPage> {
                           style: TextStyle(color: Colors.white, fontSize: 14),
                         ),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue.shade600,
+                          backgroundColor: Colors.blue.shade700,
                           padding: EdgeInsets.symmetric(
                             vertical: 10,
                           ), // Reduced padding
@@ -1628,7 +2003,7 @@ class _DashboardPageState extends State<DashboardPage> {
                       style: TextStyle(
                         fontSize: 16, // Reduced font size
                         fontWeight: FontWeight.bold,
-                        color: Colors.grey.shade800,
+                        color: Colors.white,
                       ),
                     ),
 
@@ -1646,7 +2021,7 @@ class _DashboardPageState extends State<DashboardPage> {
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: Colors.grey.shade800,
+                          color: Colors.white,
                         ),
                       ),
                       SizedBox(height: 12),
@@ -1677,6 +2052,7 @@ class _DashboardPageState extends State<DashboardPage> {
     return Card(
       margin: EdgeInsets.only(bottom: 6), // Reduced margin
       elevation: 2,
+      color: Colors.grey.shade800,
       child: ListTile(
         dense: true, // Make ListTile more compact
         contentPadding: EdgeInsets.symmetric(
@@ -1693,6 +2069,7 @@ class _DashboardPageState extends State<DashboardPage> {
           style: TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 13,
+            color: Colors.white,
           ), // Reduced font size
           overflow: TextOverflow.ellipsis, // Handle long text
         ),
@@ -1723,7 +2100,11 @@ class _DashboardPageState extends State<DashboardPage> {
         ),
         trailing: isConnected
             ? IconButton(
-                icon: Icon(Icons.settings, size: 18), // Smaller icon
+                icon: Icon(
+                  Icons.settings,
+                  size: 18,
+                  color: Colors.white70,
+                ), // Smaller icon
                 padding: EdgeInsets.all(4), // Reduced padding
                 constraints: BoxConstraints(
                   minWidth: 32,
@@ -1737,7 +2118,11 @@ class _DashboardPageState extends State<DashboardPage> {
                 },
               )
             : IconButton(
-                icon: Icon(Icons.refresh, size: 18), // Smaller icon
+                icon: Icon(
+                  Icons.refresh,
+                  size: 18,
+                  color: Colors.white70,
+                ), // Smaller icon
                 padding: EdgeInsets.all(4), // Reduced padding
                 constraints: BoxConstraints(
                   minWidth: 32,
@@ -1762,6 +2147,7 @@ class _DashboardPageState extends State<DashboardPage> {
     return Card(
       margin: EdgeInsets.only(bottom: 6),
       elevation: 2,
+      color: Colors.grey.shade800,
       child: ListTile(
         dense: true,
         contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -1772,7 +2158,11 @@ class _DashboardPageState extends State<DashboardPage> {
         ),
         title: Text(
           deviceName,
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+            color: Colors.white,
+          ),
           overflow: TextOverflow.ellipsis,
         ),
         subtitle: Row(
@@ -1800,7 +2190,7 @@ class _DashboardPageState extends State<DashboardPage> {
           ],
         ),
         trailing: IconButton(
-          icon: Icon(Icons.settings, size: 18),
+          icon: Icon(Icons.settings, size: 18, color: Colors.white70),
           padding: EdgeInsets.all(4),
           constraints: BoxConstraints(minWidth: 32, minHeight: 32),
           onPressed: () {
@@ -1823,6 +2213,7 @@ class _DashboardPageState extends State<DashboardPage> {
     return Card(
       margin: EdgeInsets.only(bottom: 6),
       elevation: 2,
+      color: Colors.grey.shade800,
       child: ListTile(
         dense: true,
         contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -1833,7 +2224,11 @@ class _DashboardPageState extends State<DashboardPage> {
         ),
         title: Text(
           deviceName,
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+            color: Colors.white,
+          ),
           overflow: TextOverflow.ellipsis,
         ),
         subtitle: Row(
@@ -1850,7 +2245,7 @@ class _DashboardPageState extends State<DashboardPage> {
             Expanded(
               child: Text(
                 'Available • Signal: ${rssi} dBm',
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
+                style: TextStyle(color: Colors.grey.shade300, fontSize: 11),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -1859,7 +2254,7 @@ class _DashboardPageState extends State<DashboardPage> {
         trailing: ElevatedButton(
           onPressed: () => _connectToDevice(scanResult),
           style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.blue.shade600,
+            backgroundColor: Colors.blue.shade700,
             padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             minimumSize: Size(60, 28),
           ),

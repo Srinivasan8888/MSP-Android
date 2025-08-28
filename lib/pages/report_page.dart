@@ -26,6 +26,7 @@ class _ReportPageState extends State<ReportPage> {
     'Pressure',
     'Altitude',
     'Air Quality',
+    'Battery',
   ];
 
   String? selectedMetric;
@@ -149,33 +150,25 @@ class _ReportPageState extends State<ReportPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Reports'),
+        backgroundColor: const Color(0xFF1E1E1E),
+        foregroundColor: Colors.white,
         automaticallyImplyLeading: false,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.history),
-            onPressed: () => _showHistoryDialog(),
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () {
-              setState(() {
-                isLoading = true;
-              });
-              _loadReports();
-            },
-          ),
-        ],
       ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
-          : Padding(
+          : Container(
+              color: const Color(0xFF121212),
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
                     'Generated Reports',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
                   ),
                   const SizedBox(height: 16),
 
@@ -184,18 +177,27 @@ class _ReportPageState extends State<ReportPage> {
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     decoration: BoxDecoration(
+                      color: const Color(0xFF2A2A2A),
                       border: Border.all(color: Colors.grey),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
                         value: selectedMetric,
-                        hint: const Text('Select Metric'),
+                        hint: const Text(
+                          'Select Metric',
+                          style: TextStyle(color: Colors.white),
+                        ),
                         isExpanded: true,
+                        dropdownColor: const Color(0xFF2A2A2A),
+                        style: const TextStyle(color: Colors.white),
                         items: metrics.map((String metric) {
                           return DropdownMenuItem<String>(
                             value: metric,
-                            child: Text(metric),
+                            child: Text(
+                              metric,
+                              style: const TextStyle(color: Colors.white),
+                            ),
                           );
                         }).toList(),
                         onChanged: (String? newValue) {
@@ -242,6 +244,7 @@ class _ReportPageState extends State<ReportPage> {
                         final report = reports[index];
                         return Card(
                           margin: const EdgeInsets.only(bottom: 12),
+                          color: const Color(0xFF1E1E1E),
                           child: ListTile(
                             leading: CircleAvatar(
                               backgroundColor: _getStatusColor(
@@ -256,13 +259,20 @@ class _ReportPageState extends State<ReportPage> {
                               report['title'],
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
+                                color: Colors.white,
                               ),
                             ),
                             subtitle: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('Date: ${report['date']}'),
-                                Text('Metric: ${report['metric']}'),
+                                Text(
+                                  'Date: ${report['date']}',
+                                  style: const TextStyle(color: Colors.grey),
+                                ),
+                                Text(
+                                  'Metric: ${report['metric']}',
+                                  style: const TextStyle(color: Colors.grey),
+                                ),
                               ],
                             ),
                             trailing: Chip(

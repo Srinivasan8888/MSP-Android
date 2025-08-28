@@ -53,6 +53,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     'Pressure',
     'Altitude',
     'Air Quality',
+    'Battery',
   ];
 
   List<FlSpot> _generateChartData() {
@@ -166,6 +167,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Analytics'),
+        backgroundColor: const Color(0xFF1E1E1E),
+        foregroundColor: Colors.white,
         automaticallyImplyLeading: false,
         // actions: [
         //   PopupMenuButton<String>(
@@ -193,22 +196,29 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'System Analytics',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 20),
-                  _buildStatsGrid(),
-                  const SizedBox(height: 24),
-                  _buildChart(),
-                  const SizedBox(height: 24),
-                  _buildInsights(),
-                ],
+          : Container(
+              color: const Color(0xFF121212),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'System Analytics',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    _buildStatsGrid(),
+                    const SizedBox(height: 24),
+                    _buildChart(),
+                    const SizedBox(height: 24),
+                    _buildInsights(),
+                  ],
+                ),
               ),
             ),
     );
@@ -261,6 +271,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         final stat = stats[index];
         return Card(
           elevation: 4,
+          color: const Color(0xFF1E1E1E),
           child: Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
@@ -277,11 +288,12 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                   style: const TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
+                    color: Colors.white,
                   ),
                 ),
                 Text(
                   stat['title'] as String,
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -295,6 +307,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   Widget _buildChart() {
     return Card(
       elevation: 4,
+      color: const Color(0xFF1E1E1E),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -305,10 +318,16 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               children: [
                 const Text(
                   'Sensor Activity Trend',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
                 ),
                 DropdownButton<String>(
                   value: selectedMetric,
+                  dropdownColor: const Color(0xFF2A2A2A),
+                  style: const TextStyle(color: Colors.white),
                   onChanged: (String? newValue) {
                     if (newValue != null) {
                       setState(() {
@@ -320,7 +339,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                   items: metrics.map<DropdownMenuItem<String>>((String value) {
                     return DropdownMenuItem<String>(
                       value: value,
-                      child: Text(value),
+                      child: Text(
+                        value,
+                        style: const TextStyle(color: Colors.white),
+                      ),
                     );
                   }).toList(),
                 ),
@@ -355,6 +377,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   Widget _buildInsights() {
     return Card(
       elevation: 4,
+      color: const Color(0xFF1E1E1E),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -362,7 +385,11 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           children: [
             const Text(
               'Key Insights',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
             ),
             const SizedBox(height: 16),
             _buildInsightItem(
@@ -410,11 +437,14 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
                 ),
                 Text(
                   description,
-                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  style: const TextStyle(color: Colors.grey, fontSize: 12),
                 ),
               ],
             ),

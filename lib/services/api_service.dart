@@ -40,8 +40,7 @@ class ApiService {
           cardData.forEach((key, value) {
             if (value is List &&
                 value.isNotEmpty &&
-                key != 'signal' &&
-                key != 'battery') {
+                key != 'signal') {
               latestValues[key] = value[0];
             }
           });
@@ -59,7 +58,6 @@ class ApiService {
                   item.map((key, value) => MapEntry(key.toString(), value)),
                 );
                 filteredItem.remove('signal');
-                filteredItem.remove('battery');
                 return filteredItem;
               }
               return <String, dynamic>{};
@@ -104,7 +102,7 @@ class ApiService {
               data['cardData']?.keys
                   .where(
                     (key) =>
-                        key != 'signal' && key != 'battery' && key != 'time',
+                        key != 'signal' && key != 'time',
                   )
                   .toList() ??
               [],
